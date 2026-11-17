@@ -1,0 +1,137 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "multena-proxy.name" . }}-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "multena-proxy.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      {{- include "multena-proxy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "multena-proxy.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "multena-proxy.serviceAccountName" . }}
+      {{- with .Values.proxy.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.proxy.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- range . }}
+        - {{- toYaml . | nindent 10 }}
+          labelSelector:
+            matchLabels:
+              {{- include "multena-proxy.selectorLabels" $ | nindent 14 }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: multena-proxy
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent"  }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.webPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort }}
+              protocol: TCP
+          {{- if .Values.probes.readinessProbe.enabled }}
+          resources:
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: {{ .Values.probes.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readinessProbe.timeoutSeconds  }}
+          {{- end }}
+          {{- if .Values.probes.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: {{ .Values.probes.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.livenessProbe.timeoutSeconds }}
+          {{- end }}
+          volumeMounts:
+            {{- if .Values.openshift }}
+            - mountPath: /etc/secrets/ca/
+              name: openshift-service-ca
+            {{- end }}
+            - mountPath: /etc/config/config/
+              name: multena-config
+            {{- if eq .Values.proxy.web.labelStoreKind "configmap" }}
+            - mountPath: /etc/config/labels/
+              name: multena-labels
+            {{- end }}
+            {{- if eq .Values.proxy.web.labelStoreKind "mysql" }}
+            - mountPath: /etc/secrets/db/
+              name: multena-db-secret
+            {{- end }}
+            {{- if eq .Values.tls.loki.enabled true }}
+            - mountPath: /etc/secrets/ca/loki/
+              name: multena-loki-tls-secret
+            {{- end }}
+            {{- if eq .Values.tls.thanos.enabled true }}
+            - mountPath: /etc/secrets/ca/thanos/
+              name: multena-thanos-tls-secret
+            {{- end }}
+      volumes:
+          {{- if .Values.openshift }}
+        - configMap:
+            name: openshift-service-ca.crt
+          name: openshift-service-ca
+          {{- end }}
+        - configMap:
+            name: {{ include "multena-proxy.name" . }}-config
+          name: multena-config
+          {{- if eq .Values.proxy.web.labelStoreKind "configmap" }}
+        - configMap:
+            name: {{ include "multena-proxy.name" . }}-labels
+          name: multena-labels
+          {{- end }}
+          {{- if eq .Values.proxy.web.labelStoreKind "mysql" }}
+        - name: multena-db-secret
+          secret:
+            secretName: {{ include "multena-proxy.secretName" . }}
+          {{- end }}
+          {{- if eq .Values.tls.loki.enabled true }}
+        - name: multena-loki-tls-secret
+          secret:
+            secretName: {{ .Values.tls.loki.secretName }}
+          {{- end }}
+          {{- if eq .Values.tls.thanos.enabled true }}
+        - name: multena-thanos-tls-secret
+          secret:
+            secretName: {{ .Values.tls.thanos.secretName }}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
