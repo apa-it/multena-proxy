@@ -57,7 +57,7 @@ func readBody(r *http.Request) []byte {
 // If the request data cannot be marshaled to JSON, an error is logged.
 func logRequestData(r *http.Request, bodyBytes []byte, logToken bool) {
 	rd := requestData{r.Method, r.URL.String(), r.Header, string(bodyBytes)}
-	if logToken {
+	if !logToken {
 		rd.Header = cleanSensitiveHeaders(rd.Header)
 	}
 	jsonData, err := json.Marshal(rd)

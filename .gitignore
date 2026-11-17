@@ -9,7 +9,7 @@ env.yaml
 ./vendor/*
 vendor
 vendor/
-multena-proxy
+/multena-proxy
 multena-proxy.iml
 ./.idea/
 .idea/
@@ -19,3 +19,5 @@ multena-proxy.iml
 ./configs/config.yaml
 ./configs
 /configs/
+multena-proxy
+multena-proxy-amd64

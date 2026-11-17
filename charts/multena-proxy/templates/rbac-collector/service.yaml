@@ -1,0 +1,18 @@
+{{- if .Values.collector.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "multena-proxy-rbac-collector.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "multena-proxy.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: {{ include "multena-proxy-rbac-collector.name" . }}
+  selector:
+    {{- include "multena-proxy-rbac-collector.selectorLabels" . | nindent 4 }}
+  type: ClusterIP
+{{- end -}}

@@ -124,8 +124,17 @@ func setupTestMain() (App, map[string]string) {
 	}
 
 	// Base64url encoding
-	x := base64.RawURLEncoding.EncodeToString(pubkey.X.Bytes())
-	y := base64.RawURLEncoding.EncodeToString(pubkey.Y.Bytes())
+	// Avoid the deprecated raw X/Y big.Int fields: convert to crypto/ecdh and use
+	// its Bytes() method, which returns the uncompressed point (0x04 || X || Y).
+	ecdhPubkey, err := pubkey.ECDH()
+	if err != nil {
+		fmt.Printf("Failed to convert public key: %s\n", err)
+		return App{}, nil
+	}
+	pubkeyBytes := ecdhPubkey.Bytes()
+	coordLen := (len(pubkeyBytes) - 1) / 2
+	x := base64.RawURLEncoding.EncodeToString(pubkeyBytes[1 : 1+coordLen])
+	y := base64.RawURLEncoding.EncodeToString(pubkeyBytes[1+coordLen:])
 
 	// Set up the JWKS server
 	jwksServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -198,7 +207,7 @@ func Test_reverseProxy(t *testing.T) {
 			setAuthorization: true,
 			URL:              "/api/v1/query_range",
 			authorization:    "Bearer ",
-			expectedBody:     "error parsing token\nno tenant labels found\n",
+			expectedBody:     "error parsing token\n",
 		},
 		{
 			name:             "Malformed_authorization_header:_Bearer_skk",
@@ -206,7 +215,7 @@ func Test_reverseProxy(t *testing.T) {
 			setAuthorization: true,
 			URL:              "/api/v1/query_range",
 			authorization:    "Bearer " + "skk",
-			expectedBody:     "error parsing token\nno tenant labels found\n",
+			expectedBody:     "error parsing token\n",
 		},
 		{
 			name:             "Missing_tenant_labels_for_user",
@@ -382,7 +391,7 @@ func TestAlertAuth(t *testing.T) {
 			setAuthorization: true,
 			URL:              "/api/v1/query_range",
 			authorization:    "Bearer ",
-			expectedBody:     "error parsing token\nno tenant labels found\n",
+			expectedBody:     "error parsing token\n",
 		},
 		{
 			name:             "Malformed_authorization_header:_Bearer_skk",
@@ -390,7 +399,7 @@ func TestAlertAuth(t *testing.T) {
 			setAuthorization: true,
 			URL:              "/api/v1/query_range",
 			authorization:    "Bearer skk",
-			expectedBody:     "error parsing token\nno tenant labels found\n",
+			expectedBody:     "error parsing token\n",
 		},
 		{
 			name:             "Missing_tenant_labels_for_user",

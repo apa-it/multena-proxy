@@ -1,0 +1,50 @@
+{{- if .Values.GrafanaOperatorDatasources.thanos }}
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: {{ include "multena-proxy.name" . }}-metrics-datasource
+  namespace: {{ .Release.Namespace }}
+spec:
+  datasource:
+    name: {{ include "multena-proxy.name" . }}-metrics (Thanos)
+    uid: {{ include "multena-proxy.name" . }}-metrics
+    type: prometheus
+    url: "http://{{ include "multena-proxy.name" . }}:{{ .Values.service.webPort }}"
+    access: proxy
+    editable: true
+    isDefault: false
+    jsonData:
+      httpMethod: POST
+      oauthPassThru: true
+      manageAlerts: false
+  instanceSelector:
+    matchLabels:
+      {{ toYaml .Values.GrafanaOperatorDatasources.labelSelector  }}
+{{- end }}
+---
+{{- if .Values.GrafanaOperatorDatasources.loki }}
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: {{ include "multena-proxy.name" . }}-logs-datasource
+  namespace: {{ .Release.Namespace }}
+spec:
+  datasource:
+    name: {{ include "multena-proxy.name" . }}-logs (Loki-Application)
+    uid: {{ include "multena-proxy.name" . }}-logs
+    type: loki
+    url: "http://{{ include "multena-proxy.name" . }}:{{ .Values.service.webPort }}"
+    access: proxy
+    editable: true
+    isDefault: false
+    jsonData:
+      httpMethod: POST
+      oauthPassThru: true
+      manageAlerts: false
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: "application"
+  instanceSelector:
+    matchLabels:
+      {{ toYaml .Values.GrafanaOperatorDatasources.labelSelector  }}
+{{- end }}

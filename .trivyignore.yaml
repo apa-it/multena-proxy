@@ -1,0 +1,16 @@
+# Trivy misconfiguration ignore list.
+#
+# AVD-KSV-0109: Trivy's secret-key heuristic flags the "admin.bypass" setting
+# in charts/multena-proxy/templates/configmaps.yaml as a stored secret because
+# the key name contains the substring "bypass". It is a boolean feature flag
+# ("enable admin bypass", default false) — not a credential, token, or
+# password. Confirmed false positive, same class as
+# https://github.com/aquasecurity/trivy/discussions/8329 and
+# https://github.com/aquasecurity/trivy/discussions/8865.
+misconfigurations:
+  - id: AVD-KSV-0109
+    paths:
+      - "charts/multena-proxy/templates/configmaps.yaml"
+    reason: >-
+      "admin.bypass" is a boolean feature flag (enable/disable admin bypass),
+      not a secret value. Trivy's heuristic matches on the "bypass" substring.

@@ -1,12 +1,12 @@
 log:
   level: 1 # 0 - debug, 1 - info, 2 - warn, 3 - error, -1 trace (exposes sensitive data)
-  log_tokens: false # log tokens in debug mode
+  log_tokens: false # DANGEROUS debug option: logs raw tokens/headers (Authorization, X-Plugin-Id, X-Id-Token) in plaintext. Never enable in production.
 
 web:
   proxy_port: 8080 # port to listen on
   metrics_port: 8081 # metrics port to listen on
   host: localhost # host to listen on
-  tls_verify_skip: true # skip tls verification very insecurely!!!
+  tls_verify_skip: false # skip tls verification very insecurely!!!
   trusted_root_ca_path: "./certs/" # path to trusted root ca
   label_store_kind: "configmap" # label provider either configmap or mysql
   jwks_cert_url: https://sso.example.com/realms/internal/protocol/openid-connect/certs # url to jwks cert of oauth provider
@@ -20,7 +20,9 @@ alert:
     enabled: false # enable alerting
     token_header: "X-Multena-alert" # header to use for the token
     alert_cert_url: https://sso.example.com/realms/internal/protocol/openid-connect/certs # url to jwks cert of oauth provider
-    alert_cert: '{"keys":[{"kid":"hXq9diKCkHZaB7QSj525rXvFxNGOPx1VJH0U3da1su4","kty":"RSA","alg":"RS256","use":"sig","n":"0H_0xxGplF1nm3OTQitGXz3S-3woZfu_APxrGIKY8i43m6K0RiFo11wVmU-4Uyko4-hvKSUV1FgMOvq5eU4e8wqnb7th3fQpKvY_HT1RHokCUUn37hLXISiOrtb21vjYmJkyw_P1ToSgQdLsryIaEisKhXD_62pBtK8fYOo3Bx-ggCSm3OjWBEUeozWFhRYsgeCrTKUbqlAQb3rlW4aA0Ay7XJfgSuMxWIYR49hX1FFPxkHnyofWDSuSE6gUiF1VhYoYi1V4siXmVEp2FYJmXBHvrbtvmfYXg6NPR7m7aUoagdcK0T1jInUpZMk_WRxPMlbTO9WfcdXXUpXhDWruWw","e":"AQAB","x5c":["MIIClTCCAX0CBgFiUtsSYDANBgkqhkiG9w0BAQsFADAOMQwwCgYDVQQDDANhcGEwHhcNMTgwMzIzMTIzMzMxWhcNMjgwMzIzMTIzNTExWjAOMQwwCgYDVQQDDANhcGEwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDQf/THEamUXWebc5NCK0ZfPdL7fChl+78A/GsYgpjyLjeborRGIWjXXBWZT7hTKSjj6G8pJRXUWAw6+rl5Th7zCqdvu2Hd9Ckq9j8dPVEeiQJRSffuEtchKI6u1vbW+NiYmTLD8/VOhKBB0uyvIhoSKwqFcP/rakG0rx9g6jcHH6CAJKbc6NYERR6jNYWFFiyB4KtMpRuqUBBveuVbhoDQDLtcl+BK4zFYhhHj2FfUUU/GQefKh9YNK5ITqBSIXVWFihiLVXiyJeZUSnYVgmZcEe+tu2+Z9heDo09HubtpShqB1wrRPWMidSlkyT9ZHE8yVtM71Z9x1ddSleENau5bAgMBAAEwDQYJKoZIhvcNAQELBQADggEBAAZT9fh2G/buEy74xZmfkKlhzXgpJSO43b4qelzws8/BiV2VokZkUykq+8/dbMzMmzQkRl9hQPRtquVhG4NdI+3hiVxSD7thH7l7RjNCXkdR4pLWRCCknBHB0rOwoz3GrM1NkHFC8m80N+vTj3cyMuCFC2mziv9t0EmRhtLEY3r+DawOudk19pbo+j8kkVgoNDxjXMR0YwSdL9Nim/LenJ/I5Y6KwXy4GEMLxGptMuVkj26BXlhVv2SfuxXiwUG1+zNzP327CZgwWbfKVvB0S98XMhCxFzXWu/RzSe0F02RmxJJ6n1z1tpkRkQCBdnCY6I2iisbYsIv2T3LqAWll3kU="],"x5t":"dlKWNkbMJ299cgIzU70toltlNiU","x5t#S256":"SGWTaLggCJGgxSgw58OIsEaRY-5DEa7y7SzTgo3Jt0o"}]}'
+    # NOTE: this is synthetic, locally-generated example material (openssl self-signed cert, CN=multena-example).
+    # It is NOT a real tenant/production key and must never be. Replace with your own JWKS before deploying.
+    alert_cert: '{"keys":[{"kid":"example-synthetic-kid-0000000000000000000","kty":"RSA","alg":"RS256","use":"sig","n":"0A8vY1A1Xwn2PEuOnGUeiOqA-9fNEVHuCOGsA4bMB9v5eLtb_QREFbHbxrHdLMkcmguz9YfuvsNue04oX5FwEY4bO4raCK5Sl6dYa_my9lfWmIvIJ_EimDR8tu7pcHCI8VtmACNaOPFvUdHCz0vR98Ro7j5WZjfZ_HgX2MWlrGAl_cfGiL9Hm8zihi77yryipI2Cje1S8q5YYmLZ7FKUXLsiJ0a35WCeQj3NWz7kdCmSXs09wcOo_IOC31oErgSgWZq5cjg6-a9diM6EB3iiX2-oQAXo_uXorWILIbyxANXYumh6iAkcoKodoHJi5mCfpuiUIVS2BdR399I6ogkp2Q","e":"AQAB","x5c":["MIICsjCCAZoCCQDAEL8i4//FHzANBgkqhkiG9w0BAQsFADAaMRgwFgYDVQQDDA9tdWx0ZW5hLWV4YW1wbGUwIBcNMjYxMTE3MjAzMzMyWhgPMjEyNjEwMjQyMDMzMzJaMBoxGDAWBgNVBAMMD211bHRlbmEtZXhhbXBsZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBANAPL2NQNV8J9jxLjpxlHojqgPvXzRFR7gjhrAOGzAfb+Xi7W/0ERBWx28ax3SzJHJoLs/WH7r7DbntOKF+RcBGOGzuK2giuUpenWGv5svZX1piLyCfxIpg0fLbu6XBwiPFbZgAjWjjxb1HRws9L0ffEaO4+VmY32fx4F9jFpaxgJf3Hxoi/R5vM4oYu+8q8oqSNgo3tUvKuWGJi2exSlFy7IidGt+VgnkI9zVs+5HQpkl7NPcHDqPyDgt9aBK4EoFmauXI4OvmvXYjOhAd4ol9vqEAF6P7l6K1iCyG8sQDV2LpoeogJHKCqHaByYuZgn6bolCFUtgXUd/fSOqIJKdkCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAVQFWAdChpUe9rt81/KxadQgYOs/v2Ul9AJirim/4l44vsp6J+aQa3Y5d7KxiiKL34Jk0ff5qKpkmUIcrfkO7lrXUNgQvmt4pgsfHyZbgwDzzxnRJDAvPOStIKwbUTcXAqsJjNpXVTTQNq0+epjtsfsdXrDQHarU2MUKITtM7acYlYLYKG+P9AztqibIaVzy+nqPq9QNvTq5aJTgMsv0p1UShOgB/TUvJ5t4EXL3y4b2/qBA1i3r88+W+6yJD0uwiZeghvZogD/Mcj6LbHqUnlu3s1CjWk9QS4A4YlGmlqKiAqsqRNNtnnQLnSq91tTRuRVSpNRLBHL2/b4KllBXCOA=="],"x5t":"MhRyC8XxKveJ2c2IBclZTNJXhlU","x5t#S256":"7S8YLvTwpwEiqnwqwBn2UbOEkf409bEyR_8cAaLpgf4"}]}'
 
 dev:
   enabled: false # enable dev mode, but dont use in production

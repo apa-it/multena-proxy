@@ -1,0 +1,59 @@
+{{- if .Values.collector.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "multena-proxy-rbac-collector.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "multena-proxy.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      {{- include "multena-proxy-rbac-collector.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "multena-proxy-rbac-collector.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "multena-proxy-rbac-collector.name" . }}-sa
+      {{- with .Values.collector.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: rbac-collector
+          image: {{ .Values.collector.image.name }}:{{ .Values.collector.image.tag }}
+          imagePullPolicy: {{ .Values.collector.image.pullPolicy }}
+          {{- with .Values.collector.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          args:
+            - serve
+            - '--level={{ .Values.collector.logLevel }}'
+            - '--cmName={{ include "multena-proxy.name" . }}-labels'
+            - '--cmNamespace={{ .Release.Namespace }}'
+          readinessProbe:
+            httpGet:
+              port: {{ .Values.collector.healthPort }}
+              path: "/healthz"
+            failureThreshold: 3
+            periodSeconds: 2
+            successThreshold: 1
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              port: {{ .Values.collector.healthPort }}
+              path: "/healthz"
+            failureThreshold: 2
+            periodSeconds: 5
+            timeoutSeconds: 10
+          resources:
+            requests:
+              cpu: {{ .Values.collector.resources.requests.cpu }}
+              memory: {{ .Values.collector.resources.requests.memory }}
+            limits:
+              memory: {{ .Values.collector.resources.limits.memory }}
+{{- end -}}
