@@ -11,6 +11,5 @@ WORKDIR /app/
 COPY --from=go-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/ca/ca-certificates.crt
 COPY --from=go-builder /app/multena-proxy/multena-proxy .
 
-HEALTHCHECK --timeout=10s CMD curl --fail http://localhost:8080/healthz || exit 1
-USER nonroot:nonroot
+USER 65532:65532
 ENTRYPOINT ["multena-proxy"]

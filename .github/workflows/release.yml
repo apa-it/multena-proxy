@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 env:
-  GO_VERSION: '1.23.4'
+  GO_VERSION: '1.27.4'
 
 jobs:
   lint:
@@ -23,8 +23,12 @@ jobs:
           cache: true
       - uses: actions/checkout@v4
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
+          # Pin a golangci-lint release built with a Go toolchain >= go.mod's
+          # Go version, otherwise "the Go language version used to build
+          # golangci-lint is lower than the targeted Go version" aborts the job.
+          version: v2.15.0
           # Optional: golangci-lint command line arguments.
           args: --issues-exit-code=1 --timeout=5m #--disable typecheck
       - name: go vet
@@ -35,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -58,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -184,7 +188,7 @@ jobs:
           buildah push ${{ steps.build-image.outputs.image-with-tag }} oci:./multena-proxy-oci
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           input: 'multena-proxy-oci'
           format: 'sarif'
