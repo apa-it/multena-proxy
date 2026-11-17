@@ -95,6 +95,16 @@ func parseJwtToken(tokenString string, a *App) (OAuthToken, *jwt.Token, error) {
 // Returns a map representing valid labels, a boolean indicating whether label enforcement should be skipped,
 // and any error that occurred during validation.
 func validateLabels(token OAuthToken, a *App) (map[string]bool, bool, error) {
+	// Defense in depth: an empty/zero-value token means authentication never
+	// succeeded (e.g. getToken failed upstream). Reject unconditionally here
+	// instead of relying solely on the later `len(tenantLabels) < 1` check,
+	// which depends on the configured LabelStore returning no labels for an
+	// anonymous identity and can be bypassed by a permissive or misconfigured
+	// LabelStore.
+	if token.PreferredUsername == "" && token.Email == "" && len(token.Groups) == 0 {
+		return nil, false, fmt.Errorf("empty identity: authentication required")
+	}
+
 	if isAdmin(token, a) {
 		log.Debug().Str("user", token.PreferredUsername).Bool("Admin", true).Msg("Skipping label enforcement")
 		return nil, true, nil
