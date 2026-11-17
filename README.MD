@@ -168,7 +168,7 @@ web:
   proxy_port: 8080 # port on which the proxy will listen
   metrics_port: 8081 # port on which the metrics will be exposed
   host: localhost # host on which the proxy will listen
-  tls_verify_skip: true # skip tls verification for the upstream server, very insecure!!!
+  tls_verify_skip: false # skip tls verification for the upstream server, very insecure!!! keep in sync with the Helm chart default.
   trusted_root_ca_path: "./certs/" # path to the trusted root ca
   label_store_kind: "configmap" # kind of label store, currently only configmap and mysql are supported
   jwks_cert_url: https://sso.example.com/realms/internal/protocol/openid-connect/certs # url to the jwks certificate
@@ -194,7 +194,7 @@ actor_header: "X-Loki-Actor-Path" # header that will be filled with a base64 use
 ```yaml
 log:
   level: 1 # log level, 0 = debug, 1 = info, 2 = warn, 3 = error, -1 = trace exposes sensitive data!!!
-  log_tokens: false # logs jwt, expose sensitive data!!!
+  log_tokens: false # DANGEROUS debug-only option: logs raw Authorization/X-Plugin-Id/X-Id-Token headers and jwt in plaintext. Never enable in production!!!
 ```
 
 #### admin section
