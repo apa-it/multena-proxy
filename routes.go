@@ -149,7 +149,7 @@ func handler(matchWord string, enforcer EnforceQL, tl string, dsURL string, tls 
 			return
 		}
 
-		labels, skip, err := validateLabels(oauthToken, a)
+		labels, skip, err := validateLabels(r.Context(), oauthToken, a)
 		if err != nil {
 			logAndWriteError(w, http.StatusForbidden, err, "")
 			return

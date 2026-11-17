@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -26,8 +27,8 @@ type permissiveLabelStore struct{}
 
 func (permissiveLabelStore) Connect(App) error { return nil }
 
-func (permissiveLabelStore) GetLabels(_ OAuthToken) (map[string]bool, bool) {
-	return map[string]bool{"allowed_tenant": true}, false
+func (permissiveLabelStore) GetLabels(_ context.Context, _ OAuthToken) (map[string]bool, bool, error) {
+	return map[string]bool{"allowed_tenant": true}, false, nil
 }
 
 // TestHandler_AuthFailure_NeverReachesUpstream is the red/green test for the
@@ -92,7 +93,7 @@ func TestValidateLabels_EmptyIdentity_RejectsIndependentlyOfLabelStore(t *testin
 		LabelStore: permissiveLabelStore{},
 	}
 
-	labels, skip, err := validateLabels(OAuthToken{}, app)
+	labels, skip, err := validateLabels(context.Background(), OAuthToken{}, app)
 
 	assert.Error(t, err)
 	assert.False(t, skip)
