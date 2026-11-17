@@ -99,21 +99,26 @@ Jwks is the JSON Web Key Set, which is used to validate the JWT token. It's like
 
 ## Deploy Multena
 
-The helm chart for Multena is available
-at [gp-helm-charts](https://github.com/gepaplexx/gp-helm-chart-development/tree/develop/infra/gp-multena)
+The Helm chart for Multena is published from this repository via GitHub Pages:
+[apa-it.github.io/multena-proxy](https://apa-it.github.io/multena-proxy/).
+
+> **Breaking change:** the chart moved from the upstream `gp-multena` chart (hosted at
+> `gepaplexx.github.io/gp-helm-charts`) to this repo's own `multena-proxy` chart. Release and
+> values names changed accordingly - see the chart's release notes before upgrading an existing
+> deployment.
 
 To install run the following commands:
 
-```bash 
-helm repo add gepardec https://gepaplexx.github.io/gp-helm-charts/
-helm install multena gepardec/gp-multena -n <grafana-namespace>
+```bash
+helm repo add multena-proxy https://apa-it.github.io/multena-proxy/
+helm install multena multena-proxy/multena-proxy -n <grafana-namespace>
 ```
 
 To upgrade, run the following commands:
 
 ```bash
 helm repo update
-helm upgrade multena gepardec/gp-multena -n <grafana-namespace>
+helm upgrade multena multena-proxy/multena-proxy -n <grafana-namespace>
 ```
 
 > **_NOTE:_** If your using the grafana operator, the helm chart provides an option to install
@@ -299,15 +304,15 @@ Multena can be deployed using its Helm chart. Execute the following commands to 
 To **install**:
 
 ```bash
-helm repo add gepardec https://gepaplexx.github.io/gp-helm-charts/
-helm install multena gepardec/gp-multena -n <grafana-namespace>
+helm repo add multena-proxy https://apa-it.github.io/multena-proxy/
+helm install multena multena-proxy/multena-proxy -n <grafana-namespace>
 ```
 
 To **upgrade**:
 
 ```bash
 helm repo update
-helm upgrade multena gepardec/gp-multena -n <grafana-namespace>
+helm upgrade multena multena-proxy/multena-proxy -n <grafana-namespace>
 ```
 
 > **Note**: When using the Grafana operator, the Helm chart provides an option to install `grafana-operator-datasources`
