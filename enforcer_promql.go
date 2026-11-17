@@ -14,6 +14,9 @@ import (
 // PromQLEnforcer is a struct with methods to enforce specific rules on Prometheus Query Language (PromQL) queries.
 type PromQLEnforcer struct{}
 
+// promqlParser is a reusable parser instance. parser.NewParser is safe for concurrent use.
+var promqlParser = parser.NewParser(parser.Options{})
+
 // Enforce enhances a given PromQL query string with additional label matchers,
 // ensuring that the query complies with the allowed tenant labels and specified label match.
 // It returns the enhanced query or an error if the query cannot be parsed or is not compliant.
@@ -31,7 +34,7 @@ func (PromQLEnforcer) Enforce(query string, allowedTenantLabels map[string]bool,
 				"|"))
 	}
 	log.Trace().Str("function", "enforcer").Str("query", query).Msg("enforcing")
-	expr, err := parser.ParseExpr(query)
+	expr, err := promqlParser.ParseExpr(query)
 	if err != nil {
 		return "", err
 	}
