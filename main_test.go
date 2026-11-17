@@ -207,7 +207,7 @@ func Test_reverseProxy(t *testing.T) {
 			setAuthorization: true,
 			URL:              "/api/v1/query_range",
 			authorization:    "Bearer ",
-			expectedBody:     "error parsing token\nno tenant labels found\n",
+			expectedBody:     "error parsing token\n",
 		},
 		{
 			name:             "Malformed_authorization_header:_Bearer_skk",
@@ -215,7 +215,7 @@ func Test_reverseProxy(t *testing.T) {
 			setAuthorization: true,
 			URL:              "/api/v1/query_range",
 			authorization:    "Bearer " + "skk",
-			expectedBody:     "error parsing token\nno tenant labels found\n",
+			expectedBody:     "error parsing token\n",
 		},
 		{
 			name:             "Missing_tenant_labels_for_user",
@@ -391,7 +391,7 @@ func TestAlertAuth(t *testing.T) {
 			setAuthorization: true,
 			URL:              "/api/v1/query_range",
 			authorization:    "Bearer ",
-			expectedBody:     "error parsing token\nno tenant labels found\n",
+			expectedBody:     "error parsing token\n",
 		},
 		{
 			name:             "Malformed_authorization_header:_Bearer_skk",
@@ -399,7 +399,7 @@ func TestAlertAuth(t *testing.T) {
 			setAuthorization: true,
 			URL:              "/api/v1/query_range",
 			authorization:    "Bearer skk",
-			expectedBody:     "error parsing token\nno tenant labels found\n",
+			expectedBody:     "error parsing token\n",
 		},
 		{
 			name:             "Missing_tenant_labels_for_user",
