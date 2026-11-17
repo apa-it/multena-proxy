@@ -80,15 +80,25 @@ type LokiConfig struct {
 	ActorHeader  string            `mapstructure:"actor_header"`
 }
 
+// TracingConfig controls the minimal, flag-gated OpenTelemetry tracing
+// adoption. Defaults to disabled; can also be set via the OTEL_TRACING_ENABLED
+// environment variable, which takes precedence over config.yaml.
+//
+// Experimental: stdout exporter only, no OTLP/Collector wiring yet.
+type TracingConfig struct {
+	Enabled bool `mapstructure:"enabled"`
+}
+
 type Config struct {
-	Log    LogConfig    `mapstructure:"log"`
-	Web    WebConfig    `mapstructure:"web"`
-	Admin  AdminConfig  `mapstructure:"admin"`
-	Alert  AlertConfig  `mapstructure:"alert"`
-	Dev    DevConfig    `mapstructure:"dev"`
-	Db     DbConfig     `mapstructure:"db"`
-	Thanos ThanosConfig `mapstructure:"thanos"`
-	Loki   LokiConfig   `mapstructure:"loki"`
+	Log     LogConfig     `mapstructure:"log"`
+	Web     WebConfig     `mapstructure:"web"`
+	Admin   AdminConfig   `mapstructure:"admin"`
+	Alert   AlertConfig   `mapstructure:"alert"`
+	Dev     DevConfig     `mapstructure:"dev"`
+	Db      DbConfig      `mapstructure:"db"`
+	Thanos  ThanosConfig  `mapstructure:"thanos"`
+	Loki    LokiConfig    `mapstructure:"loki"`
+	Tracing TracingConfig `mapstructure:"tracing"`
 }
 
 func (a *App) WithConfig() *App {
@@ -97,6 +107,10 @@ func (a *App) WithConfig() *App {
 	v.SetConfigType("yaml")
 	v.AddConfigPath("/etc/config/config/")
 	v.AddConfigPath("./configs")
+	v.SetDefault("tracing::enabled", false)
+	if err := v.BindEnv("tracing::enabled", "OTEL_TRACING_ENABLED"); err != nil {
+		log.Fatal().Err(err).Msg("Error while binding OTEL_TRACING_ENABLED env var")
+	}
 	err := v.MergeInConfig()
 	if err != nil {
 		log.Fatal().Err(err).Msg("Error no config found")

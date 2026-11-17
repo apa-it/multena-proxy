@@ -234,6 +234,22 @@ db:
   token_key: "email|username|groups" # field in the jwt which will be used to query the database 
 ```
 
+#### tracing section
+
+> **_NOTE:_** This is an experimental, minimal first step towards OpenTelemetry tracing support. It is off by
+> default, uses the stdout exporter only (no OTLP exporter, no Collector/backend wiring), and has no effect on
+> existing deployments unless explicitly enabled.
+
+```yaml
+tracing:
+  enabled: false # enable OpenTelemetry tracing (experimental, stdout exporter only)
+```
+
+The flag can also be set via the `OTEL_TRACING_ENABLED` environment variable, which takes precedence over
+`config.yaml`. When disabled (the default), no tracing SDK components are initialized and there is no tracing
+overhead. When enabled, spans for incoming requests (via `otelmux`) and outbound calls to Loki/Thanos (via
+`otelhttp`) are printed to stdout.
+
 ### labels.yaml
 
 The `labels.yaml` file is used to define the allowed labels for groups and users in Multena. It follows a specific YAML

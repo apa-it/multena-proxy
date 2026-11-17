@@ -12,6 +12,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type Route struct {
@@ -44,6 +46,9 @@ func (a *App) WithHealthz() *App {
 func (a *App) WithRoutes() *App {
 	e := mux.NewRouter()
 	e.Use(a.loggingMiddleware)
+	if a.Cfg.Tracing.Enabled {
+		e.Use(otelmux.Middleware("multena-proxy"))
+	}
 	e.SkipClean(true)
 	a.e = e
 	a.WithLoki()
@@ -206,6 +211,9 @@ func setActorHeaderPromQL(r *http.Request, token OAuthToken, a *App) error {
 func streamUp(w http.ResponseWriter, r *http.Request, upstreamURL *url.URL, tls bool, headers map[string]string, a *App) {
 	setHeaders(r, tls, headers, a.ServiceAccountToken)
 	proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
+	if a.Cfg.Tracing.Enabled {
+		proxy.Transport = otelhttp.NewTransport(http.DefaultTransport)
+	}
 	proxy.ServeHTTP(w, r)
 }
 

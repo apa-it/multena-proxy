@@ -41,6 +41,7 @@ func main() {
 
 	app := App{}
 	app.WithConfig().
+		WithTracing().
 		WithSAT().
 		WithTLSConfig().
 		WithJWKS().

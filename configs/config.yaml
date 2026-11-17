@@ -53,5 +53,8 @@ loki:
   headers:
     "X-Scope-OrgID": "application" # header to use for loki tenant
 
+tracing:
+  enabled: false # EXPERIMENTAL: enable OpenTelemetry tracing. Default off. Stdout exporter only, no OTLP/Collector backend wiring yet. Can also be set via the OTEL_TRACING_ENABLED env var (takes precedence over this value).
+
 NotRealKey:
   forTesting: purpose
