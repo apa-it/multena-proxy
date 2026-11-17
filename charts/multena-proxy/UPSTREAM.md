@@ -81,6 +81,22 @@ The diff contains only value changes to resource names/labels
 (`gp-multena*` → `multena-proxy*`), no new/removed resources or
 structural changes.
 
+## Deviations from upstream (defaults hardening, this repo only)
+
+Applied on top of the vendored/renamed chart, tracked here so a future
+re-sync against upstream knows to re-apply them:
+
+- `values.yaml`: `image.repository` → `ghcr.io/apa-it/multena-proxy`;
+  `proxy.alert.certUrl` and `proxy.web.jwksCertUrl` neutralized from the
+  upstream demo hostname `sso.play.run.gepardec.com` to `sso.example.com`.
+- `values.yaml` / `templates/deployment.yaml`: added `image.digest` to
+  allow pinning the proxy image by digest (`@sha256:...`) instead of tag.
+- `templates/external-secrets.yaml`: fixed a pre-existing upstream bug
+  where the guard condition referenced `.Values.proxy.labelStoreKind`
+  (a path that does not exist) instead of `.Values.proxy.web.labelStoreKind`,
+  which meant the `ExternalSecret` never rendered even with
+  `proxy.db.enabled: true`.
+
 ## Sync process (for future upstream updates)
 
 1. Identify the new commit SHA in the upstream repo (`gepaplexx/gp-helm-chart-development`,
