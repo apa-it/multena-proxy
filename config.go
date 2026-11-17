@@ -118,7 +118,14 @@ func (a *App) WithConfig() *App {
 	})
 	v.WatchConfig()
 	zerolog.SetGlobalLevel(zerolog.Level(a.Cfg.Log.Level))
-	log.Debug().Any("config", a.Cfg).Msg("")
+	log.Debug().
+		Str("label_store_kind", a.Cfg.Web.LabelStoreKind).
+		Bool("admin_bypass", a.Cfg.Admin.Bypass).
+		Bool("alert_enabled", a.Cfg.Alert.Enabled).
+		Bool("db_enabled", a.Cfg.Db.Enabled).
+		Bool("dev_enabled", a.Cfg.Dev.Enabled).
+		Bool("log_tokens", a.Cfg.Log.LogTokens).
+		Msg("Config loaded (redacted summary)")
 	return a
 }
 
@@ -140,7 +147,7 @@ func (a *App) WithTLSConfig() *App {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Error while reading CA certificate")
 	}
-	log.Trace().Bytes("caCert", caCert).Msg("")
+	log.Debug().Int("caCertBytes", len(caCert)).Msg("Loaded CA certificate")
 
 	rootCAs := x509.NewCertPool()
 	if ok := rootCAs.AppendCertsFromPEM(caCert); !ok {

@@ -49,7 +49,14 @@ func main() {
 		WithRoutes().
 		StartServer()
 
-	log.Info().Any("config", app.Cfg)
+	log.Info().
+		Str("label_store_kind", app.Cfg.Web.LabelStoreKind).
+		Bool("admin_bypass", app.Cfg.Admin.Bypass).
+		Bool("alert_enabled", app.Cfg.Alert.Enabled).
+		Bool("db_enabled", app.Cfg.Db.Enabled).
+		Bool("dev_enabled", app.Cfg.Dev.Enabled).
+		Bool("log_tokens", app.Cfg.Log.LogTokens).
+		Msg("Startup config summary (redacted)")
 	log.Info().Msg("------Init Complete------")
 	select {}
 }
