@@ -2,11 +2,13 @@
 
 Making the LGTM-Stack **mul**ti **tena**ncy ready
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/gepaplexx/multena-proxy)](https://goreportcard.com/report/github.com/gepaplexx/multena-proxy)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/gepaplexx/multena-proxy/release.yml?label=build)](https://github.com/gepaplexx/multena-proxy/actions/workflows/release.yml)
-[![GoDoc](https://godoc.org/github.com/gepaplexx/multena-proxy?status.svg)](https://godoc.org/github.com/gepaplexx/multena-proxy)
-[![Release](https://img.shields.io/github/v/release/gepaplexx/multena-proxy)](https://github.com/gepaplexx/multena-proxy/releases/latest)
-![License](https://img.shields.io/github/license/gepaplexx/multena-proxy)
+[![Go Report Card](https://goreportcard.com/badge/github.com/apa-it/multena-proxy)](https://goreportcard.com/report/github.com/apa-it/multena-proxy)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/apa-it/multena-proxy/release.yml?label=build)](https://github.com/apa-it/multena-proxy/actions/workflows/release.yml)
+[![GoDoc](https://godoc.org/github.com/apa-it/multena-proxy?status.svg)](https://godoc.org/github.com/apa-it/multena-proxy)
+[![Release](https://img.shields.io/github/v/release/apa-it/multena-proxy)](https://github.com/apa-it/multena-proxy/releases/latest)
+![License](https://img.shields.io/github/license/apa-it/multena-proxy)
+
+> This is a fork of [gepaplexx/multena-proxy](https://github.com/gepaplexx/multena-proxy), maintained by APA-IT.
 
 ---
 **Multena Proxy** is a multi-tenancy ready tool designed to enhance the authorization capabilities of your LGTM (Loki
