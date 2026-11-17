@@ -19,3 +19,5 @@ multena-proxy.iml
 ./configs/config.yaml
 ./configs
 /configs/
+multena-proxy
+multena-proxy-amd64
