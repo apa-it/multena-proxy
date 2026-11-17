@@ -1,0 +1,94 @@
+name: Chart CI
+
+on:
+  pull_request:
+    paths:
+      - 'charts/**'
+
+env:
+  HELM_VERSION: v3.16.4
+  KUBECONFORM_VERSION: v0.6.7
+  # Custom resources that need a cluster/operator CRD not present in a bare
+  # kind cluster (Prometheus Operator, External Secrets Operator, Grafana
+  # Operator, Kyverno). Rendering (helm template) works fine without them;
+  # only CRD-aware schema validation needs to skip these kinds explicitly.
+  CRD_SKIP_KINDS: ServiceMonitor,ExternalSecret,GrafanaDatasource,ClusterPolicy
+
+jobs:
+  lint-and-render:
+    name: lint + render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Set up Python (for ct)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.7.0
+
+      - name: Run ct lint
+        run: |
+          ct lint \
+            --target-branch main \
+            --charts charts/multena-proxy \
+            --validate-maintainers=false \
+            --lint-conf .github/ct-lintconf.yaml
+
+      - name: helm lint
+        run: helm lint charts/multena-proxy
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" | tar xz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Render tests - switch matrix
+        run: |
+          set -euo pipefail
+          SKIP="${CRD_SKIP_KINDS}"
+
+          render() {
+            local name="$1"; shift
+            echo "--- render: ${name} (set: $*) ---"
+            helm template charts/multena-proxy "$@" | kubeconform -strict -summary -skip "${SKIP}"
+          }
+
+          render "defaults"
+          render "db.enabled" --set proxy.web.labelStoreKind=mysql --set proxy.db.enabled=true
+          render "collector.enabled=false" --set collector.enabled=false
+          render "collector.enabled=true" --set collector.enabled=true
+          render "tls.loki+thanos enabled" --set tls.loki.enabled=true --set tls.thanos.enabled=true
+          render "tls.loki+thanos disabled" --set tls.loki.enabled=false --set tls.thanos.enabled=false
+          render "alert.enabled" --set proxy.alert.enabled=true
+
+      - name: Render test - digest pinning
+        run: |
+          set -euo pipefail
+          DIGEST="sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          OUT="$(helm template charts/multena-proxy --set image.digest=${DIGEST})"
+          echo "${OUT}" | kubeconform -strict -summary -skip "${CRD_SKIP_KINDS}"
+          echo "${OUT}" | grep -F "ghcr.io/apa-it/multena-proxy@${DIGEST}"
+
+      - name: Guard against foreign production hostnames in defaults
+        run: |
+          set -euo pipefail
+          # Only look at actual http(s):// URLs, not label keys like
+          # "monitoring.gepardec.com/system" which are naming conventions,
+          # not network endpoints.
+          if helm template charts/multena-proxy \
+              | grep -Eio 'https?://[^"'"'"' ]+' \
+              | grep -Ei 'gepardec\.com|gepaplexx\.com|play\.run\.' ; then
+            echo "Found a foreign production hostname in the default chart render." >&2
+            exit 1
+          fi
+          echo "No foreign production hostnames found in the default render."
