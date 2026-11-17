@@ -81,6 +81,15 @@ type LokiConfig struct {
 	ActorHeader  string            `mapstructure:"actor_header"`
 }
 
+// TracingConfig controls the minimal, flag-gated OpenTelemetry tracing
+// adoption. Defaults to disabled; can also be set via the OTEL_TRACING_ENABLED
+// environment variable, which takes precedence over config.yaml.
+//
+// Experimental: stdout exporter only, no OTLP/Collector wiring yet.
+type TracingConfig struct {
+	Enabled bool `mapstructure:"enabled"`
+}
+
 // LabelStoreCacheConfig configures the optional TTL cache sitting in front
 // of Labelstore.GetLabels. It is enabled by default with an in-memory
 // backend; set Backend to "redis" to opt into cross-instance cache sharing.
@@ -100,6 +109,7 @@ type Config struct {
 	Db              DbConfig              `mapstructure:"db"`
 	Thanos          ThanosConfig          `mapstructure:"thanos"`
 	Loki            LokiConfig            `mapstructure:"loki"`
+	Tracing         TracingConfig         `mapstructure:"tracing"`
 	LabelStoreCache LabelStoreCacheConfig `mapstructure:"labelstore_cache"`
 }
 
@@ -109,6 +119,10 @@ func (a *App) WithConfig() *App {
 	v.SetConfigType("yaml")
 	v.AddConfigPath("/etc/config/config/")
 	v.AddConfigPath("./configs")
+	v.SetDefault("tracing::enabled", false)
+	if err := v.BindEnv("tracing::enabled", "OTEL_TRACING_ENABLED"); err != nil {
+		log.Fatal().Err(err).Msg("Error while binding OTEL_TRACING_ENABLED env var")
+	}
 	v.SetDefault("labelstore_cache::enabled", true)
 	v.SetDefault("labelstore_cache::ttl", "5m")
 	v.SetDefault("labelstore_cache::backend", "memory")
