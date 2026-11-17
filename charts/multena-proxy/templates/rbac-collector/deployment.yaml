@@ -18,7 +18,7 @@ spec:
         {{- include "multena-proxy-rbac-collector.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "multena-proxy-rbac-collector.name" . }}-sa
-      {{- with .Values.collector.securityContext }}
+      {{- with .Values.collector.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -26,6 +26,10 @@ spec:
         - name: rbac-collector
           image: {{ .Values.collector.image.name }}:{{ .Values.collector.image.tag }}
           imagePullPolicy: {{ .Values.collector.image.pullPolicy }}
+          {{- with .Values.collector.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           args:
             - serve
             - '--level={{ .Values.collector.logLevel }}'

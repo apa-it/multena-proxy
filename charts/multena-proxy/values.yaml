@@ -35,7 +35,18 @@ proxy:
     oauthGroupName: "groups"
     jwksCertUrl: https://sso.play.run.gepardec.com/realms/internal/protocol/openid-connect/certs
     tlsVerifySkip: false # skip tls verification very insecurely!!!
-  securityContext: {}
+  # Pod-level security context for the multena-proxy Deployment.
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  # Container-level security context for the multena-proxy container.
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
   topologySpreadConstraints: []
 
 GrafanaOperatorDatasources:
@@ -64,7 +75,18 @@ collector:
       cpu: 5m
     limits:
       memory: 75Mi
-  securityContext: {}
+  # Pod-level security context for the rbac-collector Deployment.
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  # Container-level security context for the rbac-collector container.
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
 
 service:
   webPort: 8080
