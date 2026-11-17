@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "multena-proxy.name" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "multena-proxy.labels" . | nindent 4 }}
+data:
+  config.yaml: |-
+    log:
+      level: {{ .Values.proxy.log.level }}
+      log_tokens: false
+
+    web:
+      proxy_port: {{ .Values.service.webPort }}
+      metrics_port: {{ .Values.service.metricsPort }}
+      host: "0.0.0.0"
+      tls_verify_skip: {{ .Values.proxy.web.tlsVerifySkip}}
+      trusted_root_ca_path: "/etc/secrets/ca"
+      label_store_kind: {{ .Values.proxy.web.labelStoreKind }}
+      jwks_cert_url: {{ .Values.proxy.web.jwksCertUrl }}
+      oauth_group_name: {{ .Values.proxy.web.oauthGroupName }}
+
+    admin:
+      bypass: {{ .Values.proxy.admin.bypass }}
+      group: {{ .Values.proxy.admin.group }}
+
+    alert:
+      enabled: {{ .Values.proxy.alert.enabled }}
+      token_header: {{ .Values.proxy.alert.tokenHeader }}
+      alert_cert_url: {{ .Values.proxy.alert.certUrl }}
+      alert_cert: {{ .Values.proxy.alert.cert | quote }}
+
+    {{- if .Values.proxy.db.enabled }}
+    db:
+      enabled: true
+      user: {{ .Values.proxy.db.user }}
+      password_path: {{ .Values.proxy.db.passwordPath }}
+      host: {{ .Values.proxy.db.host }}
+      port: {{ .Values.proxy.db.port }}
+      dbName: {{ .Values.proxy.db.dbName }}
+      query: {{ .Values.proxy.db.query }}
+      token_key: {{ .Values.proxy.db.tokenKey }}
+    {{- end }}
+
+    thanos:
+      url: {{ .Values.proxy.thanos.url }}
+      tenant_label: {{ .Values.proxy.thanos.tenantLabel }}
+      use_mutual_tls: {{ .Values.tls.thanos.enabled }}
+      cert: "/etc/secrets/ca/thanos/{{ .Values.tls.thanos.cert }}"
+      key: "/etc/secrets/ca/thanos/{{ .Values.tls.thanos.key }}"
+      actor_header: {{ .Values.proxy.thanos.actorHeader }}
+      headers:
+        {{- range $key, $value := .Values.proxy.thanos.headers }}
+        {{ $key }}: {{ $value }}
+        {{- end }}
+
+    loki:
+      url: {{ .Values.proxy.loki.url }}
+      tenant_label: {{ .Values.proxy.loki.tenantLabel }}
+      use_mutual_tls: {{ .Values.tls.loki.enabled }}
+      cert: "/etc/secrets/ca/loki/{{ .Values.tls.loki.cert }}"
+      key: "/etc/secrets/ca/loki/{{ .Values.tls.loki.key }}"
+      actor_header: {{ .Values.proxy.loki.actorHeader }}
+      headers:
+        {{- range $key, $value := .Values.proxy.loki.headers }}
+        {{ $key }}: {{ $value }}
+        {{- end }}

@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "multena-proxy.name" . }}-service-monitor
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "multena-proxy.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "multena-proxy.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: {{ include "multena-proxy.name" . }}-metrics
+      interval: 15s
+      path: /metrics
