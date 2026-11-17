@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/rs/zerolog/log"
 
@@ -13,21 +16,32 @@ import (
 	"github.com/spf13/viper"
 )
 
+// maxOpenDBConns and dbConnMaxLifetime bound the MySQL connection pool used
+// by the label store so a misbehaving or slow database cannot exhaust
+// connections or keep stale connections open indefinitely.
+const (
+	maxOpenDBConns    = 10
+	dbConnMaxLifetime = time.Hour
+)
+
 // Labelstore represents an interface defining methods for connecting to a
 // label store and retrieving labels associated with a given OAuth token.
 type Labelstore interface {
 	// Connect establishes a connection with the label store using App configuration.
 	Connect(App) error
 	// GetLabels retrieves labels associated with the provided OAuth token.
-	// Returns a map containing the labels and a boolean indicating whether
-	// the label is cluster-wide or not.
-	GetLabels(token OAuthToken) (map[string]bool, bool)
+	// Returns a map containing the labels, a boolean indicating whether
+	// the label is cluster-wide or not, and an error if the lookup failed.
+	GetLabels(ctx context.Context, token OAuthToken) (map[string]bool, bool, error)
 }
 
 // WithLabelStore initializes and connects to a LabelStore specified in the
 // application configuration. It assigns the connected LabelStore to the App
 // instance and returns it. If the LabelStore type is unknown or an error
 // occurs during the connection, it logs a fatal error.
+//
+// This runs once at startup (not in the request path), so a fatal exit here
+// is an acceptable way to fail fast on misconfiguration.
 func (a *App) WithLabelStore() *App {
 	switch a.Cfg.Web.LabelStoreKind {
 	case "configmap":
@@ -45,6 +59,7 @@ func (a *App) WithLabelStore() *App {
 }
 
 type ConfigMapHandler struct {
+	mu     sync.RWMutex
 	labels map[string]map[string]bool
 }
 
@@ -58,46 +73,55 @@ func (c *ConfigMapHandler) Connect(_ App) error {
 	if err != nil {
 		return err
 	}
+	c.mu.Lock()
 	err = v.Unmarshal(&c.labels)
+	c.mu.Unlock()
 	if err != nil {
 		log.Fatal().Err(err).Msg("Error while unmarshalling config file")
 		return err
 	}
 	v.OnConfigChange(func(e fsnotify.Event) {
 		log.Info().Str("file", e.Name).Msg("Config file changed")
-		err = v.MergeInConfig()
-		if err != nil {
-			log.Fatal().Err(err).Msg("Error while unmarshalling config file")
+		if mergeErr := v.MergeInConfig(); mergeErr != nil {
+			log.Error().Err(mergeErr).Msg("Error while reloading config file")
+			return
 		}
-		err = v.Unmarshal(&c.labels)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Error while unmarshalling config file")
+		var newLabels map[string]map[string]bool
+		if unmarshalErr := v.Unmarshal(&newLabels); unmarshalErr != nil {
+			log.Error().Err(unmarshalErr).Msg("Error while unmarshalling config file")
+			return
 		}
+		c.mu.Lock()
+		c.labels = newLabels
+		c.mu.Unlock()
 	})
 	v.WatchConfig()
 	log.Debug().Any("labels", c.labels).Msg("")
 	return nil
 }
 
-func (c *ConfigMapHandler) GetLabels(token OAuthToken) (map[string]bool, bool) {
+func (c *ConfigMapHandler) GetLabels(_ context.Context, token OAuthToken) (map[string]bool, bool, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	username := token.PreferredUsername
 	groups := token.Groups
 	mergedNamespaces := make(map[string]bool, len(c.labels[username])*2)
 	for k := range c.labels[username] {
 		mergedNamespaces[k] = true
 		if k == "#cluster-wide" {
-			return nil, true
+			return nil, true, nil
 		}
 	}
 	for _, group := range groups {
 		for k := range c.labels[group] {
 			mergedNamespaces[k] = true
 			if k == "#cluster-wide" {
-				return nil, true
+				return nil, true, nil
 			}
 		}
 	}
-	return mergedNamespaces, false
+	return mergedNamespaces, false, nil
 }
 
 type MySQLHandler struct {
@@ -126,17 +150,21 @@ func (m *MySQLHandler) Connect(a App) error {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Error opening DB connection")
 	}
+	m.DB.SetMaxOpenConns(maxOpenDBConns)
+	m.DB.SetConnMaxLifetime(dbConnMaxLifetime)
 	return nil
 }
 
-func (m *MySQLHandler) Close() {
+func (m *MySQLHandler) Close() error {
 	err := m.DB.Close()
 	if err != nil {
-		log.Fatal().Err(err).Msg("Error closing DB connection")
+		log.Error().Err(err).Msg("Error closing DB connection")
+		return err
 	}
+	return nil
 }
 
-func (m *MySQLHandler) GetLabels(token OAuthToken) (map[string]bool, bool) {
+func (m *MySQLHandler) GetLabels(ctx context.Context, token OAuthToken) (map[string]bool, bool, error) {
 	tokenMap := map[string]string{
 		"email":    token.Email,
 		"username": token.PreferredUsername,
@@ -145,8 +173,8 @@ func (m *MySQLHandler) GetLabels(token OAuthToken) (map[string]bool, bool) {
 
 	value, ok := tokenMap[m.TokenKey]
 	if !ok {
-		log.Fatal().Str("property", m.TokenKey).Msg("Unsupported token property")
-		return nil, false
+		log.Error().Str("property", m.TokenKey).Msg("Unsupported token property")
+		return nil, false, fmt.Errorf("unsupported token property: %s", m.TokenKey)
 	}
 	n := strings.Count(m.Query, "?")
 
@@ -155,24 +183,29 @@ func (m *MySQLHandler) GetLabels(token OAuthToken) (map[string]bool, bool) {
 		params = append(params, value)
 	}
 
-	res, err := m.DB.Query(m.Query, params...)
-	defer func(res *sql.Rows) {
-		err := res.Close()
-		if err != nil {
-			log.Fatal().Err(err).Msg("Error closing DB result")
-		}
-	}(res)
+	res, err := m.DB.QueryContext(ctx, m.Query, params...)
 	if err != nil {
-		log.Fatal().Err(err).Str("query", m.Query).Msg("Error while querying database")
+		log.Error().Err(err).Str("query", m.Query).Msg("Error while querying database")
+		return nil, false, fmt.Errorf("error querying database: %w", err)
 	}
+	defer func() {
+		if closeErr := res.Close(); closeErr != nil {
+			log.Error().Err(closeErr).Msg("Error closing DB result")
+		}
+	}()
+
 	labels := make(map[string]bool)
 	for res.Next() {
 		var label string
-		err = res.Scan(&label)
-		labels[label] = true
-		if err != nil {
-			log.Fatal().Err(err).Msg("Error scanning DB result")
+		if err := res.Scan(&label); err != nil {
+			log.Error().Err(err).Msg("Error scanning DB result")
+			return nil, false, fmt.Errorf("error scanning DB result: %w", err)
 		}
+		labels[label] = true
 	}
-	return labels, false
+	if err := res.Err(); err != nil {
+		log.Error().Err(err).Msg("Error iterating DB result")
+		return nil, false, fmt.Errorf("error iterating DB result: %w", err)
+	}
+	return labels, false, nil
 }

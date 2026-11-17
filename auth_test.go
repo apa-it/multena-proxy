@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -71,7 +72,7 @@ func TestValidateLabels_AdminUser(t *testing.T) {
 	app.Cfg.Admin.Group = "admins"
 	app.Cfg.Admin.Bypass = true
 
-	tenantLabels, skip, err := validateLabels(oauthToken, &app)
+	tenantLabels, skip, err := validateLabels(context.Background(), oauthToken, &app)
 
 	assert.NoError(t, err)
 	assert.True(t, skip)
@@ -84,7 +85,7 @@ func TestValidateLabels_NonAdminUserWithValidLabels(t *testing.T) {
 
 	oauthToken, _, _ := parseJwtToken(tokenString, &app)
 
-	tenantLabels, skip, err := validateLabels(oauthToken, &app)
+	tenantLabels, skip, err := validateLabels(context.Background(), oauthToken, &app)
 
 	assert.NoError(t, err)
 	assert.False(t, skip)
@@ -98,7 +99,7 @@ func TestValidateLabels_NonAdminUserWithoutLabels(t *testing.T) {
 
 	oauthToken, _, _ := parseJwtToken(tokenString, &app)
 
-	tenantLabels, skip, err := validateLabels(oauthToken, &app)
+	tenantLabels, skip, err := validateLabels(context.Background(), oauthToken, &app)
 
 	assert.Error(t, err)
 	assert.False(t, skip)
