@@ -55,7 +55,53 @@ func (a *App) WithLabelStore() *App {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Error connecting to labelstore")
 	}
+	a.LabelStore = wrapLabelStoreWithCache(a.LabelStore, a.Cfg)
 	return a
+}
+
+// wrapLabelStoreWithCache wraps ls with a TTL cache in front of GetLabels
+// if labelstore_cache.enabled is set (the default). Misconfiguration of the
+// cache backend (e.g. an unreachable/unset redis address) is a startup-time
+// log.Fatal, not a silent fallback to "no caching" - the operator asked for
+// caching and must find out immediately if it cannot be provided.
+//
+// The configmap backend is intentionally never wrapped: ConfigMapHandler
+// already serves from an in-memory map guarded by a mutex (no round-trip to
+// avoid) and is refreshed instantly via fsnotify on config changes. Putting
+// a TTL cache in front of it would add complexity while introducing a real
+// regression: a user whose access was just revoked in the ConfigMap could
+// keep getting served the old, cached labels until the TTL expires.
+func wrapLabelStoreWithCache(ls Labelstore, cfg *Config) Labelstore {
+	cacheCfg := cfg.LabelStoreCache
+	if !cacheCfg.Enabled {
+		return ls
+	}
+	if cfg.Web.LabelStoreKind == "configmap" {
+		log.Debug().Msg("Labelstore cache enabled but skipped for the configmap backend (no DB round-trip to avoid; caching would add reload staleness)")
+		return ls
+	}
+
+	ttl := cacheCfg.TTL
+	if ttl <= 0 {
+		ttl = 5 * time.Minute
+	}
+
+	var cache LabelCache
+	switch cacheCfg.Backend {
+	case "", "memory":
+		cache = NewMemoryLabelCache(ttl, ttl*2)
+	case "redis":
+		redisCache, redisErr := NewRedisLabelCache(cacheCfg.Redis)
+		if redisErr != nil {
+			log.Fatal().Err(redisErr).Msg("Error connecting to redis labelstore cache backend")
+		}
+		cache = redisCache
+	default:
+		log.Fatal().Str("backend", cacheCfg.Backend).Msg("Unknown labelstore_cache.backend (must be \"memory\" or \"redis\")")
+	}
+
+	log.Info().Str("backend", cacheCfg.Backend).Dur("ttl", ttl).Msg("Labelstore cache enabled")
+	return NewCachingLabelStore(ls, cache, ttl)
 }
 
 type ConfigMapHandler struct {

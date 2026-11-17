@@ -38,6 +38,15 @@ db:
   query: "SELECT * FROM users WHERE username = ?" # sql query to execute, must return a list of allowed labels
   token_key: "email" # field in the jwt to use in the sql query
 
+labelstore_cache:
+  enabled: true # enable TTL caching of labelstore permission lookups (recommended for the mysql provider)
+  ttl: 5m # how long a successful lookup stays cached; errors are never cached
+  backend: memory # "memory" (default, in-process, no extra dependency) or "redis" (cross-instance, opt-in)
+  redis: # only used when backend is "redis"
+    address: "localhost:6379" # host:port of the redis server
+    password: "" # redis AUTH password, empty if none
+    db: 0 # redis logical DB index
+
 thanos:
   url: https://localhost:9091 # url to thanos querier
   tenant_label: namespace # label to use for tenant
