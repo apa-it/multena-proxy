@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type LogConfig struct {
@@ -80,15 +81,26 @@ type LokiConfig struct {
 	ActorHeader  string            `mapstructure:"actor_header"`
 }
 
+// LabelStoreCacheConfig configures the optional TTL cache sitting in front
+// of Labelstore.GetLabels. It is enabled by default with an in-memory
+// backend; set Backend to "redis" to opt into cross-instance cache sharing.
+type LabelStoreCacheConfig struct {
+	Enabled bool          `mapstructure:"enabled"`
+	TTL     time.Duration `mapstructure:"ttl"`
+	Backend string        `mapstructure:"backend"`
+	Redis   RedisConfig   `mapstructure:"redis"`
+}
+
 type Config struct {
-	Log    LogConfig    `mapstructure:"log"`
-	Web    WebConfig    `mapstructure:"web"`
-	Admin  AdminConfig  `mapstructure:"admin"`
-	Alert  AlertConfig  `mapstructure:"alert"`
-	Dev    DevConfig    `mapstructure:"dev"`
-	Db     DbConfig     `mapstructure:"db"`
-	Thanos ThanosConfig `mapstructure:"thanos"`
-	Loki   LokiConfig   `mapstructure:"loki"`
+	Log             LogConfig             `mapstructure:"log"`
+	Web             WebConfig             `mapstructure:"web"`
+	Admin           AdminConfig           `mapstructure:"admin"`
+	Alert           AlertConfig           `mapstructure:"alert"`
+	Dev             DevConfig             `mapstructure:"dev"`
+	Db              DbConfig              `mapstructure:"db"`
+	Thanos          ThanosConfig          `mapstructure:"thanos"`
+	Loki            LokiConfig            `mapstructure:"loki"`
+	LabelStoreCache LabelStoreCacheConfig `mapstructure:"labelstore_cache"`
 }
 
 func (a *App) WithConfig() *App {
@@ -97,6 +109,9 @@ func (a *App) WithConfig() *App {
 	v.SetConfigType("yaml")
 	v.AddConfigPath("/etc/config/config/")
 	v.AddConfigPath("./configs")
+	v.SetDefault("labelstore_cache::enabled", true)
+	v.SetDefault("labelstore_cache::ttl", "5m")
+	v.SetDefault("labelstore_cache::backend", "memory")
 	err := v.MergeInConfig()
 	if err != nil {
 		log.Fatal().Err(err).Msg("Error no config found")
