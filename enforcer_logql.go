@@ -65,6 +65,9 @@ func MatchTenantLabelMatchers(queryMatches []*labels.Matcher, tenantLabels map[s
 	foundTenantLabel := false
 	for _, match := range queryMatches {
 		if match.Name == labelMatch {
+			if match.Type != labels.MatchEqual && match.Type != labels.MatchRegexp {
+				return nil, fmt.Errorf("unauthorized negative matcher on tenant label %s", labelMatch)
+			}
 			foundTenantLabel = true
 			queryLabels := strings.Split(match.Value, "|")
 			for _, queryLabel := range queryLabels {
