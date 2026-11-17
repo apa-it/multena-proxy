@@ -31,7 +31,9 @@ jobs:
       - name: Set up Python (for ct)
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          # Pinned below 3.12: yamale (used by ct lint's schema validation)
+          # still references ast.Num/ast.Str, which were removed in Python 3.12.
+          python-version: '3.11'
 
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2.7.0
