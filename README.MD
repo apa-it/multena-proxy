@@ -159,7 +159,8 @@ the relevant label information from the MySQL database.
 
 This makes only sense if you already have a MySQL database with a systematic way to get the permissions for a user.
 
-> **_NOTE:_** As every query sends a query to the database, we recommend enabling caching for the database.
+> **_NOTE:_** Multena caches labelstore permission lookups by default (see the [Labelstore Cache](#labelstore-cache-labelstore_cache)
+> section below), so a given identity's query is only re-run once the cache entry's TTL expires, not on every request.
 
 ### config.yaml
 
@@ -251,6 +252,39 @@ The flag can also be set via the `OTEL_TRACING_ENABLED` environment variable, wh
 `config.yaml`. When disabled (the default), no tracing SDK components are initialized and there is no tracing
 overhead. When enabled, spans for incoming requests (via `otelmux`) and outbound calls to Loki/Thanos (via
 `otelhttp`) are printed to stdout.
+
+#### labelstore_cache section
+
+Multena caches `Labelstore.GetLabels` lookups so that a given identity's labels are not re-fetched from the
+backend on every proxied request. This is most relevant for the **MySQL** provider, where every uncached
+lookup is a database round-trip.
+
+```yaml
+labelstore_cache:
+  enabled: true # enable TTL caching of labelstore permission lookups; default true
+  ttl: 5m # how long a successful lookup is cached; default 5m
+  backend: memory # "memory" (default, in-process, no extra dependency) or "redis" (cross-instance, opt-in)
+  redis: # only read when backend is "redis"
+    address: "localhost:6379" # host:port of the redis server                | Required if backend: redis
+    password: "" # redis AUTH password, empty if none                       | Optional
+    db: 0 # redis logical DB index                                          | Optional
+```
+
+- **Default (`backend: memory`)**: an in-process cache (`patrickmn/go-cache`), no external dependency, no network
+  hop. Works out of the box.
+- **`backend: redis`**: an opt-in backend for sharing the cache across multiple Multena instances. Requires a
+  reachable Redis instance; Multena validates the connection at startup and exits with a clear error if
+  `redis.address` is missing or the server is unreachable - it will never silently fall back to "no caching".
+  Bring your own Redis instance; Multena does not deploy one.
+- **Error handling**: a failed lookup (e.g. a transient MySQL error) is *never* cached, regardless of backend -
+  the next request for that identity always retries against the real labelstore.
+- **ConfigMap provider**: the cache is never applied to the `configmap` provider. `ConfigMapHandler` already
+  serves from an in-memory map that is refreshed instantly via `fsnotify` on ConfigMap changes; adding a TTL
+  cache in front of it would only risk serving stale (e.g. just-revoked) permissions until the TTL expires,
+  for no round-trip to actually save.
+- **Metrics**: `multena_labelstore_cache_hits_total`, `multena_labelstore_cache_misses_total` and
+  `multena_labelstore_cache_errors_total` Prometheus counters are exposed on the metrics endpoint
+  (`/metrics`) to monitor cache effectiveness.
 
 ### labels.yaml
 
@@ -346,6 +380,11 @@ Configure if and which group can bypass enforcing steps.
 
 Enable and configure database connections, define query parameters, and specify which JWT field will be used to query
 the database.
+
+#### f. Labelstore Cache Section
+
+Configure TTL caching of labelstore permission lookups (`labelstore_cache`), on by default with an in-process
+backend; see [labelstore_cache section](#labelstore_cache-section) above for details and the opt-in Redis backend.
 
 
 

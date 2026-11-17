@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -94,7 +95,7 @@ func parseJwtToken(tokenString string, a *App) (OAuthToken, *jwt.Token, error) {
 // It checks if the user is an admin and skips label enforcement if true.
 // Returns a map representing valid labels, a boolean indicating whether label enforcement should be skipped,
 // and any error that occurred during validation.
-func validateLabels(token OAuthToken, a *App) (map[string]bool, bool, error) {
+func validateLabels(ctx context.Context, token OAuthToken, a *App) (map[string]bool, bool, error) {
 	// Defense in depth: an empty/zero-value token means authentication never
 	// succeeded (e.g. getToken failed upstream). Reject unconditionally here
 	// instead of relying solely on the later `len(tenantLabels) < 1` check,
@@ -110,7 +111,10 @@ func validateLabels(token OAuthToken, a *App) (map[string]bool, bool, error) {
 		return nil, true, nil
 	}
 
-	tenantLabels, skip := a.LabelStore.GetLabels(token)
+	tenantLabels, skip, err := a.LabelStore.GetLabels(ctx, token)
+	if err != nil {
+		return nil, false, fmt.Errorf("error retrieving labels: %w", err)
+	}
 	if skip {
 		log.Debug().Str("user", token.PreferredUsername).Bool("Admin", false).Msg("Skipping label enforcement")
 		return nil, true, nil

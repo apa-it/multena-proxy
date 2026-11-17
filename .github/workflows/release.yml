@@ -11,19 +11,29 @@ on:
 
 env:
   GO_VERSION: '1.27.4'
+  # Minimum statement coverage (go test -coverprofile) required for this repo.
+  # Keep this close to the measured baseline (~76.6% as of this change) so a
+  # regression is caught instead of ratcheted down silently. Raise it when
+  # coverage genuinely improves; never lower it to make a failing PR pass.
+  COVERAGE_THRESHOLD: '75'
+
+permissions:
+  contents: read
 
 jobs:
   lint:
     name: lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@db9de0fc1a667e1a49d2291a1a042dff081d78f6 # v9
         with:
           # Pin a golangci-lint release built with a Go toolchain >= go.mod's
           # Go version, otherwise "the Go language version used to build
@@ -34,10 +44,32 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Run govulncheck
+        # Findings must be triaged (fixed or explicitly accepted with a
+        # documented reason) rather than ignored; this step intentionally
+        # fails the build on any vulnerability reachable from our code.
+        run: govulncheck ./...
+
   scan-sarif:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -51,7 +83,7 @@ jobs:
           trivyignores: '.trivyignore.yaml'
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@b7b84b636b4f90c9b31da1bc5f72bfadd5b31410 # v3
         with:
           sarif_file: 'trivy-results.sarif'
           category: 'code'
@@ -60,8 +92,10 @@ jobs:
 
   scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -78,11 +112,13 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -90,21 +126,37 @@ jobs:
       - name: Install dependencies
         run: go get .
 
-      - name: Test
-        run: go test -v ./...
+      - name: Test (race detector + coverage)
+        run: go test -race -v -coverprofile=coverage.out ./...
+
+      - name: Enforce coverage threshold
+        run: |
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+          echo "Total statement coverage: ${total}% (threshold: ${COVERAGE_THRESHOLD}%)"
+          awk -v total="$total" -v threshold="$COVERAGE_THRESHOLD" 'BEGIN { exit !(total >= threshold) }' \
+            || { echo "::error::Coverage ${total}% is below the required ${COVERAGE_THRESHOLD}%"; exit 1; }
+
+      - name: Upload coverage profile
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-profile
+          path: coverage.out
+          retention-days: 14
 
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ./.cache  # Note that this path is not influenced by working-directory set in defaults
           key: multena-proxy-${{ github.run_id }}
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -124,15 +176,19 @@ jobs:
         run: mkdir ./.cache && cp ./multena-proxy ./.cache/multena-proxy
 
   push:
-    needs: [ build, test, scan, lint ]
+    needs: [ build, test, scan, lint, govulncheck ]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: '0'
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ./.cache  # Note that this path is not influenced by working-directory set in defaults
           key: multena-proxy-${{ github.run_id }}
@@ -146,7 +202,7 @@ jobs:
 
       - name: Get tag version
         id: tag_version
-        uses: anothrNick/github-tag-action@1.71.0
+        uses: anothrNick/github-tag-action@f278d49d30cdd8775cc3e7dd00b5ee11686ee297 # 1.71.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WITH_V: true
@@ -156,7 +212,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: |
             ghcr.io/${{ env.IMAGE_ID }}
@@ -171,7 +227,7 @@ jobs:
 
       - name: Buildah Action
         id: build-image
-        uses: redhat-actions/buildah-build@v2
+        uses: redhat-actions/buildah-build@9dc2ade9b5db229966b5025ae266311e12f349c4 # v2
         with:
           image: ${{ env.IMAGE_NAME }}
           tags: ${{ steps.meta.outputs.tags }}
@@ -179,7 +235,7 @@ jobs:
             ./build/Containerfile
 
       - name: Log in to the GitHub Container registry
-        uses: redhat-actions/podman-login@v1
+        uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -206,7 +262,7 @@ jobs:
           output: 'trivy-results.sarif'
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@b7b84b636b4f90c9b31da1bc5f72bfadd5b31410 # v3
         with:
           sarif_file: 'trivy-results.sarif'
           category: 'container'
@@ -216,9 +272,8 @@ jobs:
 
       - name: Push to GitHub Container Repository
         id: push-to-ghcr
-        uses: redhat-actions/push-to-registry@v2
+        uses: redhat-actions/push-to-registry@5860fc963bf8f2b3221773a023141612f010c469 # v2
         with:
           image: ${{ steps.build-image.outputs.image }}
           tags: ${{ steps.build-image.outputs.tags }}
           registry: ${{ env.REGISTRY }}
-
