@@ -26,6 +26,16 @@ on:
 permissions:
   contents: read
 
+# NOTE on `contents: write` below: this repo documents a rule of "no
+# automatic releases without human sign-off" elsewhere (release.yml /
+# next-version.yml are dry-run only). That rule targets *unattended*
+# releases triggered by CI on every merge. It does not apply here: this
+# workflow only runs on a `v*` tag that a human already pushed (or an
+# explicit workflow_dispatch), so the release itself is human-gated;
+# `contents: write` here is solely to attach/publish the already-built
+# chart .tgz as an asset on that existing tag's release, which is the
+# permanent storage GitHub Pages' deploy-pages overwrite cannot provide.
+
 # Serialize chart releases: two deploys racing would both read the
 # published index.yaml and one would overwrite the other's --merge result.
 concurrency:
@@ -42,7 +52,7 @@ jobs:
     name: package + index
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     outputs:
       chart_version: ${{ steps.chart-version.outputs.version }}
     steps:
@@ -87,6 +97,22 @@ jobs:
           mkdir -p dist
           helm package "${{ env.CHART_DIR }}" -d dist
 
+      - name: Publish chart as GitHub Release asset
+        # Pages' deploy-pages step below replaces the ENTIRE Pages content
+        # on every run, so .tgz files packaged in earlier runs don't
+        # survive on Pages. GitHub Release assets are not touched by
+        # deploy-pages and persist per tag, so they are the permanent
+        # home for the chart binaries; Pages only ever serves index.yaml
+        # (+ index.html), which points at these release URLs.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.tag_version.outputs.new_tag }}"
+          gh release view "$TAG" -R "${{ github.repository }}" >/dev/null 2>&1 \
+            || gh release create "$TAG" -R "${{ github.repository }}" --title "$TAG" --generate-notes
+          gh release upload "$TAG" "dist/multena-proxy-${{ steps.chart-version.outputs.version }}.tgz" \
+            -R "${{ github.repository }}" --clobber
+
       - name: Fetch existing index.yaml (if published)
         run: |
           # First-ever release has nothing to merge against; that is fine.
@@ -95,10 +121,16 @@ jobs:
 
       - name: Build index (merge with existing entries)
         run: |
+          # Only this run's new version gets indexed here, so a single
+          # --url pointing at the release asset base is correct for it.
+          # Older entries keep whatever URL they already carried in
+          # old-index.yaml - helm's --merge never rewrites existing
+          # entries, it only adds new ones.
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/download/${{ steps.tag_version.outputs.new_tag }}/"
           if [ -f old-index.yaml ]; then
-            helm repo index dist --url "${{ env.PAGES_URL }}" --merge old-index.yaml
+            helm repo index dist --url "$RELEASE_URL" --merge old-index.yaml
           else
-            helm repo index dist --url "${{ env.PAGES_URL }}"
+            helm repo index dist --url "$RELEASE_URL"
           fi
 
       - name: Build landing page (index.html)
