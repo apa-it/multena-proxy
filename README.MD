@@ -375,5 +375,26 @@ the database.
 Configure TTL caching of labelstore permission lookups (`labelstore_cache`), on by default with an in-process
 backend; see [labelstore_cache section](#labelstore_cache-section) above for details and the opt-in Redis backend.
 
+## Local Build
+
+A `Makefile` in the repo root mirrors the steps run by CI (`.github/workflows/release.yml`). Requires
+Go 1.27.4 (see `go.mod`). Run `make help` to list all targets. The most relevant ones:
+
+```bash
+make build      # go build -o multena-proxy .
+make test       # go test -race -coverprofile=coverage.out ./...
+make coverage   # run tests and enforce the 75% coverage threshold used in CI
+make vet        # go vet ./...
+make lint       # golangci-lint run (requires golangci-lint v2.15.0 installed locally)
+make vulncheck  # govulncheck ./... (installs govulncheck if missing)
+make image      # build the container image via build/Containerfile.Build (podman/docker)
+make ci         # build + vet + lint + test, a local approximation of the CI pipeline
+make clean      # remove the binary and coverage.out
+```
+
+`lint` needs `golangci-lint` installed locally (pin the CI version with
+`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0`). An optional `make helm-lint`
+target lints the chart under `charts/multena-proxy` (the dedicated `chart-ci.yml` workflow covers this in CI).
+
 
 
