@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -50,13 +51,82 @@ func getToken(r *http.Request, a *App) (OAuthToken, error) {
 	return oauthToken, nil
 }
 
+// allowedJWTAlgorithms pins the signing algorithms accepted for incoming tokens.
+// RS256 is what the Keycloak realm signs with; PS256 is what the static alert
+// certificate uses. The list is fixed in code and not derived from the JWK "alg"
+// field, so any other algorithm (HS*, ES*, RS384/512, none, ...) is rejected.
+var allowedJWTAlgorithms = []string{"RS256", "PS256"}
+
+// requireKid rejects tokens without a "kid" header before any key lookup.
+// Without it, keyfunc tries every key in the combined JWKS (Keycloak and alert
+// certificate), which would let a token signed for one path validate on the other.
+func requireKid(kf jwt.Keyfunc) jwt.Keyfunc {
+	return func(t *jwt.Token) (any, error) {
+		if kid, _ := t.Header["kid"].(string); kid == "" {
+			return nil, errors.New("token header has no kid")
+		}
+		return kf(t)
+	}
+}
+
+// verifyIssuer enforces the expected issuer list. An empty list disables the
+// check. When the check is active, a missing or non-matching iss fails closed.
+func verifyIssuer(claims jwt.MapClaims, expected []string) error {
+	if len(expected) == 0 {
+		return nil
+	}
+	iss, err := claims.GetIssuer()
+	if err != nil || iss == "" {
+		return errors.New("token has no iss claim but an issuer is expected")
+	}
+	if !slices.Contains(expected, iss) {
+		return errors.New("token issuer is not in web.expected_issuer")
+	}
+	return nil
+}
+
+// logJWTValidation states at startup which token checks are active, so a
+// disabled audience/issuer check is visible in the logs.
+func (a *App) logJWTValidation() {
+	aud, iss := a.Cfg.Web.ExpectedAudience, a.Cfg.Web.ExpectedIssuer
+
+	audState, issState := "disabled", "disabled"
+	if len(aud) > 0 {
+		audState = "enabled"
+	}
+	if len(iss) > 0 {
+		issState = "enabled"
+	}
+
+	log.Info().
+		Strs("jwt_algorithms", allowedJWTAlgorithms).
+		Str("jwt_audience_check", audState).
+		Strs("expected_audience", aud).
+		Str("jwt_issuer_check", issState).
+		Strs("expected_issuer", iss).
+		Msg("JWT validation settings")
+	if audState == "disabled" {
+		log.Warn().Msg("JWT audience check is DISABLED (web.expected_audience is empty): tokens issued for other clients of the realm are accepted")
+	}
+	if issState == "disabled" {
+		log.Warn().Msg("JWT issuer check is DISABLED (web.expected_issuer is empty)")
+	}
+}
+
 // parseJwtToken parses the JWT token string and constructs an OAuthToken from the parsed claims.
 // It returns the constructed OAuthToken, the parsed jwt.Token, and any error that occurred during parsing.
+//
+// Always enforced: allowed signing algorithms, a kid header and an exp claim.
+// Enforced only when configured: web.expected_audience and web.expected_issuer.
 func parseJwtToken(tokenString string, a *App) (OAuthToken, *jwt.Token, error) {
 	var oAuthToken OAuthToken
 	var claimsMap jwt.MapClaims
 
-	token, err := jwt.ParseWithClaims(tokenString, &claimsMap, a.Jwks.Keyfunc)
+	token, err := jwt.ParseWithClaims(tokenString, &claimsMap, requireKid(a.Jwks.Keyfunc),
+		jwt.WithValidMethods(allowedJWTAlgorithms),
+		jwt.WithExpirationRequired(),
+		jwt.WithAudience(a.Cfg.Web.ExpectedAudience...), // no-op when empty
+	)
 	if err != nil {
 		log.Error().Err(err).Msg("Error parsing token")
 		return oAuthToken, nil, err
@@ -64,6 +134,11 @@ func parseJwtToken(tokenString string, a *App) (OAuthToken, *jwt.Token, error) {
 
 	if !token.Valid {
 		log.Trace().Msg("Token is invalid")
+	}
+
+	if err := verifyIssuer(claimsMap, a.Cfg.Web.ExpectedIssuer); err != nil {
+		log.Error().Err(err).Msg("Error validating token issuer")
+		return oAuthToken, nil, err
 	}
 
 	if v, ok := claimsMap["preferred_username"].(string); ok {

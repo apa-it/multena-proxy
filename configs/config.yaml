@@ -11,6 +11,8 @@ web:
   label_store_kind: "configmap" # label provider either configmap or mysql
   jwks_cert_url: https://sso.example.com/realms/internal/protocol/openid-connect/certs # url to jwks cert of oauth provider
   oauth_group_name: "groups" # name of the group field in the jwt
+  expected_audience: [] # RECOMMENDED to set, e.g. ["multena"]: tokens must carry one of these in "aud". Empty = audience check disabled
+  expected_issuer: [] # RECOMMENDED to set, e.g. ["https://sso.example.com/realms/internal"]: tokens must have "iss" equal to one of these. Empty = issuer check disabled
 
 admin:
   bypass: true # enable admin bypass

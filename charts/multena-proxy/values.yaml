@@ -34,6 +34,10 @@ proxy:
     labelStoreKind: configmap # label provider either configmap or mysql
     oauthGroupName: "groups"
     jwksCertUrl: https://sso.example.com/realms/internal/protocol/openid-connect/certs
+    # RECOMMENDED to set. Tokens must carry one of these in "aud" (e.g. ["multena"]). Empty = check disabled.
+    expectedAudience: []
+    # RECOMMENDED to set. Token "iss" must equal one of these (e.g. ["https://sso.example.com/realms/internal"]). Empty = check disabled.
+    expectedIssuer: []
     tlsVerifySkip: false # skip tls verification very insecurely!!!
   # Pod-level security context for the multena-proxy Deployment.
   podSecurityContext:
