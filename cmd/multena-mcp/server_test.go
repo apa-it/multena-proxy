@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
@@ -158,7 +160,11 @@ type harness struct {
 func newHarness(t *testing.T, kc *fakeKeycloak, px *fakeProxy) *harness {
 	t.Helper()
 	h := &harness{keycloak: kc, proxy: px}
-	h.jwksSrv = httptest.NewServer(jwksHandler(&signingKey(t).PublicKey))
+	jwks := jwksHandler(&signingKey(t).PublicKey)
+	h.jwksSrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.jwksCalls.Add(1)
+		jwks(w, r)
+	}))
 	t.Cleanup(h.jwksSrv.Close)
 	h.kcSrv = httptest.NewServer(kc)
 	t.Cleanup(h.kcSrv.Close)
@@ -210,7 +216,7 @@ func postMCP(t *testing.T, base, bearer string) *http.Response {
 	}
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	t.Cleanup(func() { resp.Body.Close() })
+	t.Cleanup(func() { _ = resp.Body.Close() })
 	return resp
 }
 
@@ -223,7 +229,7 @@ func TestProtectedResourceMetadata(t *testing.T) {
 		require.NoError(t, err)
 		var doc map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&doc))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode, path)
 		assert.Equal(t, h.srv.URL+mcpPath, doc["resource"], path)
 		assert.Equal(t, []any{testIssuer}, doc["authorization_servers"], path)
@@ -272,6 +278,25 @@ func TestInvalidTokens_Return401(t *testing.T) {
 		require.NoError(t, err)
 		return s
 	}
+	// Only RS256 is allowed (realm signature). A PS256 token signed with the
+	// correct, JWKS-published RSA key must still be rejected by the method pin.
+	psTok := func() string {
+		tok := jwt.NewWithClaims(jwt.SigningMethodPS256, userClaims(now))
+		tok.Header["kid"] = testKID
+		s, err := tok.SignedString(signingKey(t))
+		require.NoError(t, err)
+		return s
+	}
+	// ES256 with a valid EC key: rejected by the method pin, not by the key.
+	esTok := func() string {
+		ecKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+		tok := jwt.NewWithClaims(jwt.SigningMethodES256, userClaims(now))
+		tok.Header["kid"] = testKID
+		s, err := tok.SignedString(ecKey)
+		require.NoError(t, err)
+		return s
+	}
 
 	cases := map[string]string{
 		"wrong aud (multena instead of multena-mcp)": signRS256(t, mutate(func(c jwt.MapClaims) { c["aud"] = testUpstreamAu }), testKID),
@@ -286,6 +311,8 @@ func TestInvalidTokens_Return401(t *testing.T) {
 		"signed by other key with known kid": forgedTok(),
 		"alg HS256":                          hs256(),
 		"alg none":                           noneAlg(),
+		"alg PS256 with realm key":           psTok(),
+		"alg ES256 with known kid":           esTok(),
 		"garbage":                            "not.a.jwt",
 	}
 	for name, tok := range cases {
@@ -410,10 +437,16 @@ func TestToolListsServiceInstances_TokenExchangedNotPassedThrough(t *testing.T) 
 	// Upstream: exactly one call, carrying the exchanged token and never the inbound one.
 	assert.Equal(t, int32(1), px.calls.Load())
 	px.mu.Lock()
-	defer px.mu.Unlock()
-	require.Len(t, px.authSeen, 1)
-	assert.Equal(t, "Bearer "+exchangedToken, px.authSeen[0])
-	assert.NotContains(t, px.authSeen[0], inbound)
+	seen := append([]string(nil), px.authSeen...)
+	px.mu.Unlock()
+	require.Len(t, seen, 1)
+	assert.Equal(t, "Bearer "+exchangedToken, seen[0])
+	assert.NotContains(t, seen[0], inbound)
+
+	// JWKS is fetched once at startup and cached; a second call must not refetch.
+	_, err = session.CallTool(context.Background(), &mcp.CallToolParams{Name: "list_service_instances", Arguments: map[string]any{}})
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), h.jwksCalls.Load(), "JWKS fetched once, then cached")
 }
 
 func TestToolReturnsError_WhenExchangeDenied(t *testing.T) {

@@ -24,7 +24,7 @@ Ohne gültiges Token: `401` mit
 
 Fail-closed, Regeln aus dem Token-Contract (t_c33696d0 §3):
 
-- Signatur über JWKS (`MULTENA_MCP_JWKS_URL`), Algorithmen fest `RS256`/`ES256`
+- Signatur über JWKS (`MULTENA_MCP_JWKS_URL`), Algorithmus fest `RS256` (Keycloak-Realm-Signatur; kein PS256/ES256)
 - `kid` ist Pflicht
 - `iss` == `MULTENA_MCP_ISSUER`
 - `aud` enthält `MULTENA_MCP_AUDIENCE` (Default `multena-mcp`)

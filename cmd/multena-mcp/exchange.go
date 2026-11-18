@@ -55,7 +55,7 @@ func (e *tokenExchanger) Exchange(ctx context.Context, subjectToken string) (str
 	if err != nil {
 		return "", fmt.Errorf("%w: transport", errTokenExchange)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("%w: status %d", errTokenExchange, resp.StatusCode)

@@ -13,9 +13,14 @@ import (
 )
 
 // allowedAlgs is the fixed signature allowlist for incoming user tokens.
-// Keycloak realm keys are RS256 by default; ES256 is accepted for completeness.
-// Not configurable on purpose.
-var allowedAlgs = []string{"RS256", "ES256"}
+//
+// Only RS256: the Keycloak realm signs its access tokens with RS256 (same
+// finding as multena-proxy, which allows RS256 and PS256). PS256 is left out
+// here on purpose: in multena-proxy it exists only for the static alert
+// certificate, which never issues tokens to this MCP endpoint. ES256 is left
+// out because the realm does not sign with it; accepting an algorithm nothing
+// signs with only widens the attack surface. Not configurable on purpose.
+var allowedAlgs = []string{"RS256"}
 
 // bearerInfoKey is the TokenInfo.Extra key under which the inbound token is kept
 // for the exchange step. It is never logged or returned to the client.

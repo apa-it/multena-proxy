@@ -85,7 +85,7 @@ func (t *siTool) fetchSIValues(ctx context.Context, bearer string) ([]string, er
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		return nil, fmt.Errorf("proxy returned status %d", resp.StatusCode)
