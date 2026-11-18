@@ -396,5 +396,11 @@ make clean      # remove the binary and coverage.out
 `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0`). An optional `make helm-lint`
 target lints the chart under `charts/multena-proxy` (the dedicated `chart-ci.yml` workflow covers this in CI).
 
+## Releasing
+
+Versioning follows Conventional Commits; the `Next Version (dry-run)` workflow computes and reports
+what the next version would be, but tagging/releasing stays a manual, human-approved step. See
+[RELEASING.md](RELEASING.md) for the full workflow and commit message convention.
+
 
 
