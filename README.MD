@@ -396,5 +396,18 @@ make clean      # remove the binary and coverage.out
 `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0`). An optional `make helm-lint`
 target lints the chart under `charts/multena-proxy` (the dedicated `chart-ci.yml` workflow covers this in CI).
 
+## Image Tags
+
+| Tag | Source | Stability |
+| --- | --- | --- |
+| `vX.Y.Z` | `release.yml`, triggered by an image release tag (`v*`) or manual dispatch | Stable, production reference |
+| `latest` | `release.yml`, same job as above | Stable, always equals the most recent `vX.Y.Z` release |
+| `main` | `.github/workflows/edge.yml`, triggered by every push to `main` | Rolling dev/edge build, **no version guarantee**, not for production |
+| `<git sha>` | both of the above | Immutable, lets you map any `main`/`latest` build back to its commit |
+
+`main` is rebuilt and overwritten on every merge to `main` (after the same CRITICAL/HIGH Trivy severity
+gate as the release build - a commit with findings builds but is not published). Use it only to pick up
+unreleased changes for testing; pin deployments to `vX.Y.Z` or `latest`.
+
 
 
