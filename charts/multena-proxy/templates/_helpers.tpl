@@ -76,3 +76,23 @@ Create the name of the service account to use
 {{- define "multena-proxy.secretName" -}}
 {{ .Values.proxy.db.existingSecret | default (printf "%s-db-external-secret" (include "multena-proxy.name" .)) }}
 {{- end }}
+
+{{/*
+Full image repository (without tag/digest): "<registry>/<repository>".
+Input (dict): registry, repository.
+- If registry is empty, the repository is returned unchanged.
+- If the repository already starts with a host (first path segment contains "." or ":",
+  or is "localhost"), the registry is NOT prepended. This keeps values files that bake
+  the host into the repository working unchanged, even though image.registry defaults to ghcr.io.
+*/}}
+{{- define "multena-proxy.imageRepository" -}}
+{{- $registry := trimSuffix "/" (default "" .registry) -}}
+{{- $repo := .repository -}}
+{{- $first := index (splitList "/" $repo) 0 -}}
+{{- $hasHost := and (contains "/" $repo) (or (contains "." $first) (contains ":" $first) (eq $first "localhost")) -}}
+{{- if and $registry (not $hasHost) -}}
+{{- printf "%s/%s" $registry $repo -}}
+{{- else -}}
+{{- $repo -}}
+{{- end -}}
+{{- end }}

@@ -24,7 +24,7 @@ spec:
       {{- end }}
       containers:
         - name: rbac-collector
-          image: {{ .Values.collector.image.name }}:{{ .Values.collector.image.tag }}
+          image: {{ include "multena-proxy.imageRepository" (dict "registry" .Values.collector.image.registry "repository" .Values.collector.image.name) }}:{{ .Values.collector.image.tag }}
           imagePullPolicy: {{ .Values.collector.image.pullPolicy }}
           {{- with .Values.collector.securityContext }}
           securityContext:

@@ -126,6 +126,25 @@ helm upgrade multena multena-proxy/multena-proxy -n <grafana-namespace>
 > which simplifies the deployment of Multena. If you deploy Multena without the grafana-operator-datasources you have to
 > configure the datasource manually.
 
+### Image registry (pull-through mirrors)
+
+The registry host is configurable separately from the image path, so all images can be pulled through an internal
+mirror without overriding the whole repository string:
+
+```yaml
+image:
+  registry: ghcr.io                  # default; set to your mirror, e.g. my-mirror.example.com
+  repository: apa-it/multena-proxy
+collector:
+  image:
+    registry: ghcr.io                # default; set to your mirror
+    name: gepaplexx/multena-rbac-collector
+```
+
+- `registry` is prepended to `repository` / `collector.image.name`. Leave it empty to omit the registry segment.
+- If `repository` / `collector.image.name` already starts with a host (e.g. `my-mirror.example.com/apa-it/multena-proxy`),
+  `registry` is ignored, so existing values files that bake the host into the repository keep rendering unchanged.
+
 # Configuring Multena
 
 ## Labelstore Providers

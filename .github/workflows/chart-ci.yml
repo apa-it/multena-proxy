@@ -81,6 +81,31 @@ jobs:
           echo "${OUT}" | kubeconform -strict -summary -skip "${CRD_SKIP_KINDS}"
           echo "${OUT}" | grep -F "ghcr.io/apa-it/multena-proxy@${DIGEST}"
 
+      - name: Render test - image.registry override (pull-through mirror)
+        run: |
+          set -euo pipefail
+          MIRROR="mirror.example.test"
+          # Default render must keep the ghcr.io references unchanged.
+          DEF="$(helm template charts/multena-proxy --set collector.enabled=true)"
+          echo "${DEF}" | grep -F "image: \"ghcr.io/apa-it/multena-proxy:"
+          echo "${DEF}" | grep -F "image: ghcr.io/gepaplexx/multena-rbac-collector:"
+          # Registry override replaces the host for both images.
+          OUT="$(helm template charts/multena-proxy --set collector.enabled=true \
+            --set image.registry=${MIRROR} --set collector.image.registry=${MIRROR})"
+          echo "${OUT}" | kubeconform -strict -summary -skip "${CRD_SKIP_KINDS}"
+          echo "${OUT}" | grep -F "image: \"${MIRROR}/apa-it/multena-proxy:"
+          echo "${OUT}" | grep -F "image: ${MIRROR}/gepaplexx/multena-rbac-collector:"
+          # Full host baked into repository/name must not get the registry prepended.
+          FULL="$(helm template charts/multena-proxy --set collector.enabled=true \
+            --set image.repository=${MIRROR}/apa-it/multena-proxy \
+            --set collector.image.name=${MIRROR}/gepaplexx/multena-rbac-collector)"
+          echo "${FULL}" | grep -F "image: \"${MIRROR}/apa-it/multena-proxy:"
+          echo "${FULL}" | grep -F "image: ${MIRROR}/gepaplexx/multena-rbac-collector:"
+          if echo "${FULL}" | grep -F "ghcr.io/"; then
+            echo "Default registry was prepended to a repository that already contains a host." >&2
+            exit 1
+          fi
+
       - name: Guard against foreign production hostnames in defaults
         run: |
           set -euo pipefail
