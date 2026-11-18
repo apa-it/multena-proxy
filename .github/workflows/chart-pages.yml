@@ -79,12 +79,14 @@ jobs:
 
       - name: Set chart version and appVersion from tag
         run: |
-          # Strip the leading 'v' - Chart.yaml's version/appVersion are plain
-          # semver, the git tag carries the 'v' prefix.
-          semver="${{ steps.tag_version.outputs.new_tag }}"
-          semver="${semver#v}"
+          # Chart.yaml 'version' must be strict semver, so the leading 'v' is
+          # stripped there. 'appVersion' must equal the image tag actually
+          # pushed to ghcr.io by release.yml (raw git tag, WITH the 'v'),
+          # otherwise the chart's default image tag does not exist.
+          tag="${{ steps.tag_version.outputs.new_tag }}"
+          semver="${tag#v}"
           sed -i -E "s/^version: .*/version: ${semver}/" "${{ env.CHART_DIR }}/Chart.yaml"
-          sed -i -E "s/^appVersion: .*/appVersion: \"${semver}\"/" "${{ env.CHART_DIR }}/Chart.yaml"
+          sed -i -E "s/^appVersion: .*/appVersion: \"${tag}\"/" "${{ env.CHART_DIR }}/Chart.yaml"
 
       - name: Read chart version
         id: chart-version

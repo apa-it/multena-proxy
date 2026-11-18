@@ -5,7 +5,7 @@
 >
 > App version and Helm chart version are versioned together: pushing a
 > single `vX.Y.Z` tag publishes both the container image and the chart
-> (version `X.Y.Z` and appVersion `X.Y.Z`). There is no separate
+> (version `X.Y.Z`, appVersion `vX.Y.Z` - matching the pushed image tag). There is no separate
 > `multena-proxy-X.Y.Z` tag.
 
 ## Breaking change
