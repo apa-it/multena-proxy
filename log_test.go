@@ -122,3 +122,87 @@ func TestReadBody_ReturnsBytesAndResetsBody(t *testing.T) {
 		t.Fatalf("expected body to be reset for re-read, got %q", string(again))
 	}
 }
+
+// TestLoggingMiddleware_AlertTokenHeaderRedacted ensures that with log_tokens == false
+// the configured alert token header value never reaches the log, even though it is
+// not part of the static deny list.
+func TestLoggingMiddleware_AlertTokenHeaderRedacted(t *testing.T) {
+	const alertSecret = "alert-secret-token-value"
+	app := &App{Cfg: &Config{
+		Log:   LogConfig{LogTokens: false},
+		Alert: AlertConfig{Enabled: true, TokenHeader: "X-Multena-Alert"},
+	}}
+	mw := app.loggingMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/query", strings.NewReader("body"))
+	r.Header.Set("X-Multena-Alert", "Bearer "+alertSecret)
+
+	var buf bytes.Buffer
+	captureLog(t, &buf, func() {
+		mw.ServeHTTP(httptest.NewRecorder(), r)
+	})
+
+	out := buf.String()
+	if !strings.Contains(out, "\"request\"") {
+		t.Fatalf("expected request to be logged, got: %s", out)
+	}
+	if strings.Contains(out, alertSecret) {
+		t.Fatalf("log output leaked alert token header value; full output: %s", out)
+	}
+}
+
+// TestLogRequestData_ExtraSensitiveHeaderRedacted covers the direct helper path with
+// an explicitly passed header name, matched case-insensitively.
+func TestLogRequestData_ExtraSensitiveHeaderRedacted(t *testing.T) {
+	var buf bytes.Buffer
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("X-Multena-Alert-Token", "Bearer alert-leak-canary")
+	r.Header.Set("X-Other", "keep-me")
+
+	captureLog(t, &buf, func() {
+		logRequestData(r, []byte("[REDACTED]"), false, "x-multena-alert-token", "")
+	})
+
+	out := buf.String()
+	if strings.Contains(out, "alert-leak-canary") || strings.Contains(strings.ToLower(out), "x-multena-alert-token") {
+		t.Fatalf("log output leaked extra sensitive header; full output: %s", out)
+	}
+	if !strings.Contains(out, "keep-me") {
+		t.Fatalf("expected non-sensitive header to be preserved, got: %s", out)
+	}
+}
+
+// TestLogRequestData_ExtraSensitiveHeaderKeptWhenTokenLoggingEnabled confirms the
+// opt-in path still logs everything verbatim.
+func TestLogRequestData_ExtraSensitiveHeaderKeptWhenTokenLoggingEnabled(t *testing.T) {
+	var buf bytes.Buffer
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("X-Multena-Alert", "Bearer alert-visible-value")
+
+	captureLog(t, &buf, func() {
+		logRequestData(r, []byte("body"), true, "X-Multena-Alert")
+	})
+
+	if !strings.Contains(buf.String(), "alert-visible-value") {
+		t.Fatalf("expected alert header to be logged when log_tokens is true, got: %s", buf.String())
+	}
+}
+
+// TestGetToken_DoesNotLogTokenValue guards against the bearer token being written to
+// the trace log, which previously happened regardless of log_tokens.
+func TestGetToken_DoesNotLogTokenValue(t *testing.T) {
+	const canary = "leak-canary-token"
+	app := &App{Cfg: &Config{Log: LogConfig{LogTokens: false}}}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	// Two "Bearer" occurrences make parsing fail before any JWKS lookup happens.
+	r.Header.Set("Authorization", "Bearer "+canary+" Bearer x")
+
+	var buf bytes.Buffer
+	captureLog(t, &buf, func() {
+		_, _ = getToken(r, app)
+	})
+
+	if strings.Contains(buf.String(), canary) {
+		t.Fatalf("token value leaked into trace log; full output: %s", buf.String())
+	}
+}

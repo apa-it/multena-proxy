@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/rs/zerolog/log"
 )
@@ -29,7 +30,7 @@ func (a *App) loggingMiddleware(next http.Handler) http.Handler {
 			bodyBytes = []byte("[REDACTED]")
 		}
 		// log.Trace().Any("Request", r.Headers).Msg("")
-		logRequestData(r, bodyBytes, a.Cfg.Log.LogTokens)
+		logRequestData(r, bodyBytes, a.Cfg.Log.LogTokens, a.Cfg.Alert.TokenHeader)
 		next.ServeHTTP(w, r)
 		log.Debug().Str("path", r.URL.Path).Msg("Request complete")
 	})
@@ -54,11 +55,13 @@ func readBody(r *http.Request) []byte {
 
 // logRequestData logs the specified request's details, including method, headers, and optionally, body content.
 // If logToken is false, sensitive headers are cleaned before logging.
+// Additional header names (e.g. the configured alert token header) may be passed
+// in extraSensitive; they are removed as well when logToken is false.
 // If the request data cannot be marshaled to JSON, an error is logged.
-func logRequestData(r *http.Request, bodyBytes []byte, logToken bool) {
+func logRequestData(r *http.Request, bodyBytes []byte, logToken bool, extraSensitive ...string) {
 	rd := requestData{r.Method, r.URL.String(), r.Header, string(bodyBytes)}
 	if !logToken {
-		rd.Header = cleanSensitiveHeaders(rd.Header)
+		rd.Header = cleanSensitiveHeaders(rd.Header, extraSensitive...)
 	}
 	jsonData, err := json.Marshal(rd)
 	if err != nil {
@@ -69,15 +72,23 @@ func logRequestData(r *http.Request, bodyBytes []byte, logToken bool) {
 }
 
 // cleanSensitiveHeaders creates and returns a copy of the provided HTTP headers with sensitive headers removed.
-// Sensitive headers like "Authorization", "X-Plugin-Id", and "X-Id-Token" are deleted to prevent them from being logged.
-func cleanSensitiveHeaders(headers http.Header) http.Header {
+// Sensitive headers like "Authorization", "X-Plugin-Id", and "X-Id-Token" are deleted to prevent them from being logged,
+// as well as every header name passed in extra (e.g. the configured alert token header).
+// Header names are matched case-insensitively; empty names are ignored.
+func cleanSensitiveHeaders(headers http.Header, extra ...string) http.Header {
 	copyHeader := make(http.Header)
 	for k, v := range headers {
 		copyHeader[k] = v
 	}
-	copyHeader.Del("Authorization")
-	copyHeader.Del("X-Plugin-Id")
-	copyHeader.Del("X-Id-Token")
+	sensitive := append([]string{"Authorization", "X-Plugin-Id", "X-Id-Token"}, extra...)
+	for k := range copyHeader {
+		for _, name := range sensitive {
+			if name != "" && strings.EqualFold(k, name) {
+				delete(copyHeader, k)
+				break
+			}
+		}
+	}
 	return copyHeader
 }
 

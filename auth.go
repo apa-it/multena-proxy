@@ -33,9 +33,9 @@ func getToken(r *http.Request, a *App) (OAuthToken, error) {
 			return OAuthToken{}, errors.New("no Authorization header found")
 		}
 	}
-	log.Trace().Str("authToken", authToken).Msg("AuthToken")
+	// Never log the token value itself; it is a credential and must not depend on log level.
 	splitToken := strings.Split(authToken, "Bearer")
-	log.Trace().Strs("splitToken", splitToken).Msg("SplitToken")
+	log.Trace().Int("parts", len(splitToken)).Msg("SplitToken")
 	if len(splitToken) != 2 {
 		return OAuthToken{}, errors.New("invalid Authorization header")
 	}
