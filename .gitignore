@@ -21,3 +21,6 @@ multena-proxy.iml
 /configs/
 multena-proxy
 multena-proxy-amd64
+
+# go-semantic-release plugin cache (downloaded locally for dry-run testing)
+/.semrel/
