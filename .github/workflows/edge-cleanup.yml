@@ -1,0 +1,178 @@
+name: Edge Image Cleanup
+
+# Weekly rotation for the rolling ghcr.io/apa-it/multena-proxy edge builds
+# that edge.yml publishes on every push to main (a mutable `main` tag plus
+# an immutable per-commit SHA tag). GHCR never deletes anything on its own
+# and every push adds one more SHA-tagged version, so without this job the
+# package grows unbounded. Follow-up to PR #25, which intentionally left
+# cleanup out of scope pending its own review.
+#
+# Hard safety rules enforced as an exclusion filter (not just a comment),
+# see the "classify" step below:
+#   - any tag matching ^v[0-9]+\.[0-9]+\.[0-9]+$ (a real release, published
+#     by release.yml) is never a deletion candidate.
+#   - the `latest` tag is never a deletion candidate.
+#   - of everything else (the rolling main/SHA edge builds) only the
+#     versions older than the `keep_n` most recent are deletion candidates.
+#
+# Tool choice: actions/delete-package-versions (official GitHub Action)
+# over snok/container-retention-policy. The snok action has an attractive
+# native --dry-run flag, but the wildcard/negation syntax its docs require
+# to express "exclude v* and latest" (`image-tags: "!v* !latest"`) is
+# documented as only working with a personal access token or GitHub App
+# token, not the default GITHUB_TOKEN this repo limits CI to everywhere
+# else (edge.yml, release.yml). actions/delete-package-versions's
+# `ignore-versions` (plain regex) and `min-versions-to-keep` inputs work
+# fine with GITHUB_TOKEN as long as the repo has Admin access under
+# Package settings > Manage Actions access - the same requirement
+# edge.yml/release.yml already rely on for `packages: write`. A hand-rolled
+# script against `gh api` was also considered, but reimplementing
+# pagination/rate-limit handling by hand for something an established
+# action already does correctly isn't worth the extra bespoke code.
+#
+# actions/delete-package-versions has no dry-run flag. To cover that, this
+# workflow adds its own read-only preview step (gh api, packages: read
+# only) that classifies every package version into protected/kept/delete
+# using the exact same regex and keep_n count, and logs the full result to
+# the job summary on every run - schedule, and any workflow_dispatch,
+# dry_run or not. The actual delete job only runs on the weekly schedule or
+# on an explicit workflow_dispatch with dry_run=false; a manual dispatch
+# defaults to dry_run=true so it can be used purely to test/inspect the
+# classification without touching the registry.
+
+on:
+  schedule:
+    # Monday 04:00 UTC, well before the Monday 13:00 CAB slot.
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Preview only - classify and log, do not delete anything'
+        type: boolean
+        default: true
+      keep_n:
+        description: 'Number of most recent non-release, non-latest versions to always keep'
+        type: string
+        default: '10'
+
+env:
+  PACKAGE_OWNER: apa-it
+  PACKAGE_NAME: multena-proxy
+  # Real releases (vX.Y.Z, published by release.yml) and `latest` are never
+  # deletion candidates, regardless of dry_run/keep_n.
+  PROTECTED_TAG_REGEX: '^(v[0-9]+\.[0-9]+\.[0-9]+|latest)$'
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    name: classify (read-only, always runs)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      delete_candidate_ids: ${{ steps.classify.outputs.delete_candidate_ids }}
+      delete_candidate_count: ${{ steps.classify.outputs.delete_candidate_count }}
+    steps:
+      - name: Classify package versions
+        id: classify
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP_N_INPUT: ${{ inputs.keep_n }}
+        run: |
+          set -euo pipefail
+          keep_n="${KEEP_N_INPUT:-10}"
+          [[ "$keep_n" =~ ^[0-9]+$ ]] || { echo "::error::keep_n must be a non-negative integer, got '$keep_n'"; exit 1; }
+
+          gh api --paginate \
+            "/orgs/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions?per_page=100" \
+            > versions.json
+
+          jq --arg re "$PROTECTED_TAG_REGEX" --argjson keep "$keep_n" '
+            def is_protected: (.metadata.container.tags // []) | any(test($re));
+            (sort_by(.created_at) | reverse) as $all
+            | ([ $all[] | select(is_protected) ]) as $protected
+            | ([ $all[] | select(is_protected | not) ]) as $rest
+            | ($rest[0:$keep]) as $kept_recent
+            | ($rest[$keep:]) as $delete_candidates
+            | {
+                total: ($all | length),
+                protected: [ $protected[] | {id, created_at, tags: (.metadata.container.tags // [])} ],
+                kept_recent: [ $kept_recent[] | {id, created_at, tags: (.metadata.container.tags // [])} ],
+                delete_candidates: [ $delete_candidates[] | {id, created_at, tags: (.metadata.container.tags // [])} ]
+              }
+          ' versions.json > classification.json
+
+          # Safety net: the filter above already excludes protected tags from
+          # delete_candidates by construction, but assert it explicitly so a
+          # future edit to the jq expression cannot silently regress this.
+          unsafe=$(jq --arg re "$PROTECTED_TAG_REGEX" \
+            '[.delete_candidates[] | select((.tags // []) | any(test($re)))] | length' \
+            classification.json)
+          if [ "$unsafe" != "0" ]; then
+            echo "::error::$unsafe delete candidate(s) match the protected tag regex - aborting, this must never happen."
+            exit 1
+          fi
+
+          echo "== Package: ${PACKAGE_OWNER}/${PACKAGE_NAME} (type: container) =="
+          echo "keep_n: $keep_n | protected regex: $PROTECTED_TAG_REGEX"
+          echo
+          echo "-- protected (never deleted: v*.*.* release tags, latest) --"
+          jq -r '.protected[] | "  id=\(.id)  created=\(.created_at)  tags=\(.tags)"' classification.json
+          echo
+          echo "-- kept (most recent $keep_n non-release builds) --"
+          jq -r '.kept_recent[] | "  id=\(.id)  created=\(.created_at)  tags=\(.tags)"' classification.json
+          echo
+          echo "-- DELETE CANDIDATES (older than the $keep_n most recent non-release builds) --"
+          jq -r '.delete_candidates[] | "  id=\(.id)  created=\(.created_at)  tags=\(.tags)"' classification.json
+
+          {
+            echo "## Edge image cleanup classification"
+            echo
+            echo "Package \`${PACKAGE_OWNER}/${PACKAGE_NAME}\`, keep_n=$keep_n"
+            echo
+            echo "| | count |"
+            echo "| --- | --- |"
+            echo "| total versions | $(jq '.total' classification.json) |"
+            echo "| protected (release/latest) | $(jq '.protected | length' classification.json) |"
+            echo "| kept (recent non-release) | $(jq '.kept_recent | length' classification.json) |"
+            echo "| delete candidates | $(jq '.delete_candidates | length' classification.json) |"
+            echo
+            echo "<details><summary>Delete candidates</summary>"
+            echo
+            echo '```'
+            jq -r '.delete_candidates[] | "id=\(.id)  created=\(.created_at)  tags=\(.tags)"' classification.json
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          ids=$(jq -r '[.delete_candidates[].id] | join(",")' classification.json)
+          count=$(jq '.delete_candidates | length' classification.json)
+          echo "delete_candidate_ids=$ids" >> "$GITHUB_OUTPUT"
+          echo "delete_candidate_count=$count" >> "$GITHUB_OUTPUT"
+
+  cleanup:
+    name: delete old edge builds
+    needs: preview
+    # Weekly schedule always performs the real cleanup. A manual dispatch
+    # only deletes when explicitly requested with dry_run=false; the
+    # default (dry_run=true) only exercises the preview job above.
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.dry_run == false)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Delete versions older than keep_n (release tags and latest excluded)
+        if: needs.preview.outputs.delete_candidate_count != '0'
+        uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5
+        with:
+          owner: apa-it
+          package-name: ${{ env.PACKAGE_NAME }}
+          package-type: container
+          min-versions-to-keep: ${{ inputs.keep_n || '10' }}
+          ignore-versions: ${{ env.PROTECTED_TAG_REGEX }}

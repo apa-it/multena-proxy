@@ -415,5 +415,11 @@ what the next version would be, but tagging/releasing stays a manual, human-appr
 gate as the release build - a commit with findings builds but is not published). Use it only to pick up
 unreleased changes for testing; pin deployments to `vX.Y.Z` or `latest`.
 
+Every edge build also keeps its own immutable `<git sha>` tag forever, so the package would otherwise
+grow by one version per push to `main`. `.github/workflows/edge-cleanup.yml` runs weekly and deletes the
+oldest edge builds beyond the most recent N (default 10, configurable via `workflow_dispatch`); any
+`vX.Y.Z` release tag and `latest` are excluded from deletion unconditionally. See
+[Edge image cleanup](RELEASING.md#edge-image-cleanup-main-tag-rotation) in `RELEASING.md` for details.
+
 
 

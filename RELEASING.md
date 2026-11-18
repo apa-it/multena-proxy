@@ -79,3 +79,25 @@ to `main`, through the same Trivy severity gate. It is a rolling
 dev/edge build with no version guarantee — never a substitute for the
 manual `vX.Y.Z` release above, and not for production use. See the
 [Image Tags](README.MD#image-tags) section in the README for details.
+
+## Edge image cleanup (`main` tag rotation)
+
+Every edge build keeps an immutable `<git sha>` tag forever, even after a
+later push overwrites the mutable `main` tag, so the package grows by one
+version on every push to `main` with nothing ever deleted automatically by
+GHCR. `.github/workflows/edge-cleanup.yml` runs weekly (Monday 04:00 UTC)
+against the `ghcr.io/apa-it/multena-proxy` package and deletes versions
+older than the most recent N non-release builds (`keep_n`, default `10`).
+
+Hard, filter-enforced retention rules - not just documented intent:
+
+- any tag matching `vX.Y.Z` (a real release published by `release.yml`) is
+  never deleted;
+- the `latest` tag is never deleted;
+- of the rest (rolling `main`/SHA-tagged edge builds), only versions older
+  than the `keep_n` most recent are deletion candidates.
+
+The workflow can also be run manually via `workflow_dispatch` with a
+`dry_run` input (default `true`) to classify and log what would be deleted
+without touching the registry, and a `keep_n` input to override the
+default retention count for that run.
