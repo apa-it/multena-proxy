@@ -402,5 +402,18 @@ Versioning follows Conventional Commits; the `Next Version (dry-run)` workflow c
 what the next version would be, but tagging/releasing stays a manual, human-approved step. See
 [RELEASING.md](RELEASING.md) for the full workflow and commit message convention.
 
+## Image Tags
+
+| Tag | Source | Stability |
+| --- | --- | --- |
+| `vX.Y.Z` | `release.yml`, triggered by an image release tag (`v*`) or manual dispatch | Stable, production reference |
+| `latest` | `release.yml`, same job as above | Stable, always equals the most recent `vX.Y.Z` release |
+| `main` | `.github/workflows/edge.yml`, triggered by every push to `main` | Rolling dev/edge build, **no version guarantee**, not for production |
+| `<git sha>` | both of the above | Immutable, lets you map any `main`/`latest` build back to its commit |
+
+`main` is rebuilt and overwritten on every merge to `main` (after the same CRITICAL/HIGH Trivy severity
+gate as the release build - a commit with findings builds but is not published). Use it only to pick up
+unreleased changes for testing; pin deployments to `vX.Y.Z` or `latest`.
+
 
 

@@ -70,3 +70,12 @@ output: `new version: 1.0.0`).
    `multena-proxy-X.Y.Z` tag convention / `chart-pages.yml` flow. See
    those workflows for details — this document does not change their
    trigger logic.
+
+## Edge image (`main` tag)
+
+Separately from the above, `.github/workflows/edge.yml` publishes
+`ghcr.io/apa-it/multena-proxy:main` (plus the commit SHA) on every push
+to `main`, through the same Trivy severity gate. It is a rolling
+dev/edge build with no version guarantee — never a substitute for the
+manual `vX.Y.Z` release above, and not for production use. See the
+[Image Tags](README.MD#image-tags) section in the README for details.
