@@ -57,7 +57,11 @@ GrafanaOperatorDatasources:
 
 replicas: 1
 image:
-  repository: ghcr.io/apa-it/multena-proxy
+  # Registry host, prepended to repository (e.g. a pull-through mirror: my-mirror.example.com).
+  # Empty = omit the registry segment. If repository already starts with a host
+  # (e.g. my-mirror.example.com/apa-it/multena-proxy), registry is ignored.
+  registry: ghcr.io
+  repository: apa-it/multena-proxy
   pullPolicy: IfNotPresent
   tag: ""
   digest: "" # optional, e.g. "sha256:<64-hex>" to pin by digest; overrides tag/appVersion when set
@@ -67,7 +71,9 @@ collector:
   logLevel: 1 # 0 - debug, 1 - info, 2 - warn, 3 - error, -1 trace (exposes sensitive data)
   healthPort: 8080
   image:
-    name: ghcr.io/gepaplexx/multena-rbac-collector
+    # Registry host, prepended to name (see image.registry). Empty = omit; ignored if name starts with a host.
+    registry: ghcr.io
+    name: gepaplexx/multena-rbac-collector
     tag: 0.1.5
     pullPolicy: IfNotPresent
   resources:

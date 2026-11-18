@@ -86,6 +86,11 @@ structural changes.
 Applied on top of the vendored/renamed chart, tracked here so a future
 re-sync against upstream knows to re-apply them:
 
+- `values.yaml` / `templates/deployment.yaml` / `templates/rbac-collector/deployment.yaml`: split the image host
+  into a separate `registry` field (`image.registry: ghcr.io` + `image.repository: apa-it/multena-proxy`,
+  `collector.image.registry: ghcr.io` + `collector.image.name: gepaplexx/multena-rbac-collector`) so
+  pull-through mirrors can be set via `registry` alone. Image refs are built by the
+  `multena-proxy.imageRepository` helper in `_helpers.tpl`; default renders are unchanged.
 - `values.yaml`: `image.repository` → `ghcr.io/apa-it/multena-proxy`;
   `proxy.alert.certUrl` and `proxy.web.jwksCertUrl` neutralized from the
   upstream demo hostname `sso.play.run.gepardec.com` to `sso.example.com`.

@@ -33,6 +33,8 @@ Existing deployments installed from the old chart must be migrated:
 
 ## Chart changes
 
+- New `image.registry` and `collector.image.registry` (default `ghcr.io`) for pull-through mirrors;
+  the registry is prepended to `image.repository` / `collector.image.name` unless those already contain a host.
 - Hardened chart defaults: configurable `image.repository`, digest pinning,
   neutral SSO placeholder, `ExternalSecret` `labelStoreKind` bugfix (merged
   in #13).
