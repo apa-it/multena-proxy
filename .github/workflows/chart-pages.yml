@@ -5,15 +5,23 @@ name: Chart Release (Pages)
 # NOT use helm/chart-releaser-action, because that action pushes to a
 # gh-pages branch, which does not match this repo's Pages source mode.
 #
-# Only runs on an explicit chart release tag or a manual dispatch. It never
+# Only runs on an explicit release tag or a manual dispatch. It never
 # triggers on a plain push to main, so merging a chart version bump alone
 # does not publish anything.
+#
+# A single vX.Y.Z tag drives both this workflow and release.yml's image
+# publish: the app version (appVersion) and the Helm chart version
+# (version) are versioned together and derived from the same tag.
 on:
   push:
     tags:
-      # Chart release tags, e.g. multena-proxy-1.8.0
-      - 'multena-proxy-*'
-  workflow_dispatch: {}
+      # Release tags, e.g. v0.8.0. Same schema as release.yml.
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Chart/app version to publish (e.g. v0.8.0). Required for a manual release.'
+        required: true
 
 permissions:
   contents: read
@@ -44,6 +52,29 @@ jobs:
         uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
         with:
           version: ${{ env.HELM_VERSION }}
+
+      - name: Determine release version
+        id: tag_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF#refs/tags/}"
+          fi
+          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release version '$version' does not match the required vX.Y.Z schema (no build metadata)." >&2
+            exit 1
+          fi
+          echo "new_tag=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Set chart version and appVersion from tag
+        run: |
+          # Strip the leading 'v' - Chart.yaml's version/appVersion are plain
+          # semver, the git tag carries the 'v' prefix.
+          semver="${{ steps.tag_version.outputs.new_tag }}"
+          semver="${semver#v}"
+          sed -i -E "s/^version: .*/version: ${semver}/" "${{ env.CHART_DIR }}/Chart.yaml"
+          sed -i -E "s/^appVersion: .*/appVersion: \"${semver}\"/" "${{ env.CHART_DIR }}/Chart.yaml"
 
       - name: Read chart version
         id: chart-version

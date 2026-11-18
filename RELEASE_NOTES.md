@@ -1,7 +1,12 @@
-# Release notes draft - v0.8.0 / chart multena-proxy-1.8.0
+# Release notes draft - v0.8.0
 
 > Draft for the next real release. Copy this into the GitHub Release body when
 > the tag is actually pushed; this file is not itself a publish action.
+>
+> App version and Helm chart version are versioned together: pushing a
+> single `vX.Y.Z` tag publishes both the container image and the chart
+> (version `X.Y.Z` and appVersion `X.Y.Z`). There is no separate
+> `multena-proxy-X.Y.Z` tag.
 
 ## Breaking change
 

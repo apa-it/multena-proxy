@@ -1,0 +1,94 @@
+name: Next Version (dry-run)
+
+# Computes what the next semantic version WOULD be according to
+# Conventional Commits, using go-semantic-release in --dry mode. This
+# workflow never tags, releases, publishes an image or deploys Pages -
+# it only reports a number for a human to review. Tagging remains a
+# manual step (git tag vX.Y.Z && git push origin vX.Y.Z); see
+# RELEASING.md. The actual release/publish pipeline lives in
+# release.yml/chart-pages.yml and is untouched by this workflow.
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  # Pinned go-semantic-release release. Bump deliberately, not silently.
+  SEMREL_VERSION: v2.31.0
+
+jobs:
+  next-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Full history is needed so the commit-analyzer can walk back to
+          # the latest release tag (or the repo root if there is none yet).
+          fetch-depth: 0
+
+      - name: Install go-semantic-release
+        run: |
+          set -euo pipefail
+          curl -sSL \
+            "https://github.com/go-semantic-release/semantic-release/releases/download/${SEMREL_VERSION}/semantic-release_${SEMREL_VERSION}_linux_amd64" \
+            -o semantic-release
+          chmod +x semantic-release
+
+      - name: Dry-run version calculation
+        id: semrel
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # --no-ci: this is a pure calculation, not a release gate, so it
+          #   must run on PR branches too, not only the default branch.
+          # --dry: never creates a GitHub release/tag.
+          # --allow-no-changes: exit 0 (instead of 65) when there is
+          #   nothing to release yet, so the job stays green.
+          set +e
+          output=$(./semantic-release --no-ci --dry --allow-no-changes --provider github --token "$GITHUB_TOKEN" 2>&1)
+          status=$?
+          set -e
+          echo "$output"
+
+          next_version=$(printf '%s\n' "$output" | grep -o 'new version: [0-9][0-9.]*' | awk '{print $3}' || true)
+
+          {
+            echo "## Next version (dry-run)"
+            echo
+            if [ -n "$next_version" ]; then
+              echo "Next version would be: **v${next_version}**"
+            else
+              echo "No release required (no release-relevant commits since the last tag)."
+            fi
+            echo
+            echo "This is a calculation only. Nothing was tagged, released, or deployed."
+            echo "Tagging stays a manual, human-approved step - see RELEASING.md."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$next_version" ]; then
+            echo "comment=Next version would be: **v${next_version}** (computed by go-semantic-release --dry; no tag/release was created, see RELEASING.md)." >> "$GITHUB_OUTPUT"
+          else
+            echo "comment=No release required right now (no release-relevant commits since the last tag), per go-semantic-release --dry." >> "$GITHUB_OUTPUT"
+          fi
+
+          # Any exit code other than 0 (success) or 65 (no changes, already
+          # handled above as a normal outcome) is a real failure.
+          if [ "$status" -ne 0 ] && [ "$status" -ne 65 ]; then
+            exit "$status"
+          fi
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db # v2.9.2
+        with:
+          header: next-version
+          message: ${{ steps.semrel.outputs.comment }}

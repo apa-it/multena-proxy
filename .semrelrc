@@ -1,0 +1,13 @@
+{
+  "plugins": {
+    "provider": {
+      "name": "github"
+    },
+    "commit-analyzer": {
+      "name": "default"
+    },
+    "changelog-generator": {
+      "name": "default"
+    }
+  }
+}
