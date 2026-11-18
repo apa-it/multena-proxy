@@ -31,6 +31,12 @@ type WebConfig struct {
 	JwksCertURL         string `mapstructure:"jwks_cert_url"`
 	OAuthGroupName      string `mapstructure:"oauth_group_name"`
 	ServiceAccountToken string `mapstructure:"service_account_token"`
+	// ExpectedAudience: a token must carry at least one of these in its aud
+	// claim. Empty = audience check disabled (backwards compatible).
+	ExpectedAudience []string `mapstructure:"expected_audience"`
+	// ExpectedIssuer: a token's iss claim must equal one of these. Empty =
+	// issuer check disabled (backwards compatible).
+	ExpectedIssuer []string `mapstructure:"expected_issuer"`
 }
 
 type AdminConfig struct {
@@ -240,5 +246,6 @@ func (a *App) WithJWKS() *App {
 	}
 	log.Info().Str("url", a.Cfg.Web.JwksCertURL).Msg("JWKS URL")
 	a.Jwks = jwks
+	a.logJWTValidation()
 	return a
 }

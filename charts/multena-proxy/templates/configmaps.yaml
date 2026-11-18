@@ -20,6 +20,8 @@ data:
       label_store_kind: {{ .Values.proxy.web.labelStoreKind }}
       jwks_cert_url: {{ .Values.proxy.web.jwksCertUrl }}
       oauth_group_name: {{ .Values.proxy.web.oauthGroupName }}
+      expected_audience: {{ .Values.proxy.web.expectedAudience | default list | toJson }}
+      expected_issuer: {{ .Values.proxy.web.expectedIssuer | default list | toJson }}
 
     admin:
       bypass: {{ .Values.proxy.admin.bypass }}

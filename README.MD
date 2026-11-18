@@ -200,7 +200,11 @@ web:
   label_store_kind: "configmap" # kind of label store, currently only configmap and mysql are supported
   jwks_cert_url: https://sso.example.com/realms/internal/protocol/openid-connect/certs # url to the jwks certificate
   oauth_group_name: "groups" # name of the group field in the jwt token
+  expected_audience: [] # RECOMMENDED: e.g. ["multena"]. Tokens must have one of these in "aud". Empty = check off
+  expected_issuer: [] # RECOMMENDED: e.g. ["https://user.apa.at/auth/realms/apa"]. Tokens must have "iss" equal to one of these. Empty = check off
 ```
+
+**Token validation.** Always enforced, regardless of config: the signing algorithm must be `RS256` or `PS256` (no HS*, ES*, `none`); tokens need a `kid` header and an `exp` claim. `expected_audience` and `expected_issuer` are opt-in: when empty the check is skipped, so existing deployments keep working. Set both to the values your clients use. Without them, any token signed by a key in the configured JWKS is accepted, including tokens issued for other clients of the same realm. At startup the log line `JWT validation settings` shows `jwt_audience_check` and `jwt_issuer_check` (`enabled`/`disabled`); a disabled check also logs a WARN.
 
 #### datasource section (thanos|loki)
 

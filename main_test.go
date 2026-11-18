@@ -1,16 +1,13 @@
 package main
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/x509"
-	"encoding/base64"
-	"encoding/pem"
+	"crypto/rsa"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog/log"
 
@@ -18,49 +15,26 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func genJWKS(username, email string, groups []string, pk *ecdsa.PrivateKey) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
+// genJWKS signs a test token with RS256. Keycloak and the alert certificate
+// both use RS256, which is the only algorithm the proxy accepts.
+func genJWKS(username, email string, groups []string, pk *rsa.PrivateKey) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"preferred_username": username,
 		"email":              email,
 		"groups":             groups,
+		"exp":                time.Now().Add(time.Hour).Unix(), // exp is mandatory
 	})
 	token.Header["kid"] = "testKid"
 	return token.SignedString(pk)
 }
 
 func setupTestMain() (App, map[string]string) {
-	// Generate a new private key.
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	// Generate a new RSA key pair (RS256, matching Keycloak and the alert cert).
+	pk, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		fmt.Printf("Failed to generate private key: %s\n", err)
 		return App{}, nil
 	}
-
-	// Encode the private key to PEM format.
-	privateKeyBytes, err := x509.MarshalECPrivateKey(privateKey)
-	if err != nil {
-		fmt.Printf("Failed to marshal private key: %s\n", err)
-		return App{}, nil
-	}
-	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "EC PRIVATE KEY",
-		Bytes: privateKeyBytes,
-	})
-
-	// Encode the public key to PEM format.
-	publicKeyBytes, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
-	if err != nil {
-		fmt.Printf("Failed to marshal public key: %s\n", err)
-		return App{}, nil
-	}
-	publicKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: publicKeyBytes,
-	})
-
-	// Generate a key pair
-	pk, _ := jwt.ParseECPrivateKeyFromPEM(privateKeyPEM)
-	pubkey, _ := jwt.ParseECPublicKeyFromPEM(publicKeyPEM)
 
 	jwks := []struct {
 		name     string
@@ -123,22 +97,9 @@ func setupTestMain() (App, map[string]string) {
 		tokens[jwk.name] = token
 	}
 
-	// Base64url encoding
-	// Avoid the deprecated raw X/Y big.Int fields: convert to crypto/ecdh and use
-	// its Bytes() method, which returns the uncompressed point (0x04 || X || Y).
-	ecdhPubkey, err := pubkey.ECDH()
-	if err != nil {
-		fmt.Printf("Failed to convert public key: %s\n", err)
-		return App{}, nil
-	}
-	pubkeyBytes := ecdhPubkey.Bytes()
-	coordLen := (len(pubkeyBytes) - 1) / 2
-	x := base64.RawURLEncoding.EncodeToString(pubkeyBytes[1 : 1+coordLen])
-	y := base64.RawURLEncoding.EncodeToString(pubkeyBytes[1+coordLen:])
-
 	// Set up the JWKS server
 	jwksServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := fmt.Fprintf(w, `{"keys":[{"kty":"EC","kid":"testKid","alg":"ES256","use":"sig","x":"%s","y":"%s","crv":"P-256"}]}`, x, y)
+		_, err := fmt.Fprint(w, rsaJWKSJSON(&pk.PublicKey, "RS256"))
 		if err != nil {
 			return
 		}
